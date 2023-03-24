@@ -7,11 +7,11 @@ start participating.
 
 ## Topics
 
-* [Reporting Security Issues](#reporting-security-issues)
-* [Design and Cleanup Proposals](#design-and-cleanup-proposals)
-* [Reporting Issues](#reporting-other-issues)
-* [Quick Contribution Tips and Guidelines](#quick-contribution-tips-and-guidelines)
-* [Community Guidelines](#community-guidelines)
+- [Reporting Security Issues](#reporting-security-issues)
+- [Design and Cleanup Proposals](#design-and-cleanup-proposals)
+- [Reporting Issues](#reporting-other-issues)
+- [Quick Contribution Tips and Guidelines](#quick-contribution-tips-and-guidelines)
+- [Community Guidelines](#community-guidelines)
 
 ## Reporting security issues
 
@@ -31,10 +31,10 @@ A great way to contribute to the project is to send a detailed report when you
 encounter an issue. We always appreciate a well-written, thorough bug report,
 and will thank you for it!
 
-Check that [our issue database](https://github.com/xuri/excelize/issues)
+Check that [our issue database](https://github.com/Aymeric-Henry/excelize/issues)
 doesn't already include that problem or suggestion before submitting an issue.
 If you find a match, you can use the "subscribe" button to get notified on
-updates. Do *not* leave random "+1" or "I have this too" comments, as they
+updates. Do _not_ leave random "+1" or "I have this too" comments, as they
 only clutter the discussion, and don't help resolving it. However, if you
 have ways to reproduce the issue or have additional information that may help
 resolving the issue, please leave a comment.
@@ -55,7 +55,7 @@ This section gives the experienced contributor some tips and guidelines.
 
 Not sure if that typo is worth a pull request? Found a bug and know how to fix
 it? Do it! We will appreciate it. Any significant improvement should be
-documented as [a GitHub issue](https://github.com/xuri/excelize/issues) before
+documented as [a GitHub issue](https://github.com/Aymeric-Henry/excelize/issues) before
 anybody starts working on it.
 
 We are always thrilled to receive pull requests. We do our best to process them
@@ -70,17 +70,17 @@ otherwise cleanup our project.
 
 We try hard to keep excelize lean and focused. Excelize can't do everything for
 everybody. This means that we might decide against incorporating a new feature.
-However, there might be a way to implement that feature *on top of* excelize.
+However, there might be a way to implement that feature _on top of_ excelize.
 
 ### Conventions
 
 Fork the repository and make changes on your fork in a feature branch:
 
-* If it's a bug fix branch, name it XXXX-something where XXXX is the number of
-    the issue.
-* If it's a feature branch, create an enhancement issue to announce
-    your intentions, and name it XXXX-something where XXXX is the number of the
-    issue.
+- If it's a bug fix branch, name it XXXX-something where XXXX is the number of
+  the issue.
+- If it's a feature branch, create an enhancement issue to announce
+  your intentions, and name it XXXX-something where XXXX is the number of the
+  issue.
 
 Submit unit tests for your changes. Go has a great test framework built in; use
 it! Take a look at existing tests for inspiration. Run the full test on your branch before
@@ -245,10 +245,10 @@ commit automatically with `git commit -s`.
 
 First, all maintainers have 3 things
 
-* They share responsibility in the project's success.
-* They have made a long-term, recurring time investment to improve the project.
-* They spend that time doing whatever needs to be done, not necessarily what
- is the most interesting or fun.
+- They share responsibility in the project's success.
+- They have made a long-term, recurring time investment to improve the project.
+- They spend that time doing whatever needs to be done, not necessarily what
+  is the most interesting or fun.
 
 Maintainers are often under-appreciated, because their work is harder to appreciate.
 It's easy to appreciate a really cool and technically advanced feature. It's harder
@@ -268,25 +268,25 @@ We want to keep the community awesome, growing and collaborative. We need
 your help to keep it that way. To help with this we've come up with some general
 guidelines for the community as a whole:
 
-* Be nice: Be courteous, respectful and polite to fellow community members:
+- Be nice: Be courteous, respectful and polite to fellow community members:
   no regional, racial, gender, or other abuse will be tolerated. We like
   nice people way better than mean ones!
 
-* Encourage diversity and participation: Make everyone in our community feel
+- Encourage diversity and participation: Make everyone in our community feel
   welcome, regardless of their background and the extent of their
   contributions, and do everything possible to encourage participation in
   our community.
 
-* Keep it legal: Basically, don't get us in trouble. Share only content that
+- Keep it legal: Basically, don't get us in trouble. Share only content that
   you own, do not share private or sensitive information, and don't break
   the law.
 
-* Stay on topic: Make sure that you are posting to the correct channel and
+- Stay on topic: Make sure that you are posting to the correct channel and
   avoid off-topic discussions. Remember when you update an issue or respond
   to an email you are potentially sending to a large number of people. Please
   consider this before you update. Also remember that nobody likes spam.
 
-* Don't send email to the maintainers: There's no need to send email to the
+- Don't send email to the maintainers: There's no need to send email to the
   maintainers to ask them to investigate an issue or to take a look at a
   pull request. Instead of sending an email, GitHub mentions should be
   used to ping maintainers to review a pull request, a proposal or an
@@ -308,24 +308,24 @@ do need a fair way to deal with people who are making our community suck.
 
 **Notes:**
 
-* Obvious spammers are banned on first occurrence. If we don't do this, we'll
+- Obvious spammers are banned on first occurrence. If we don't do this, we'll
   have spam all over the place.
 
-* Violations are forgiven after 6 months of good behavior, and we won't hold a
+- Violations are forgiven after 6 months of good behavior, and we won't hold a
   grudge.
 
-* People who commit minor infractions will get some education, rather than
+- People who commit minor infractions will get some education, rather than
   hammering them in the 3 strikes process.
 
-* The rules apply equally to everyone in the community, no matter how much
-    you've contributed.
+- The rules apply equally to everyone in the community, no matter how much
+  you've contributed.
 
-* Extreme violations of a threatening, abusive, destructive or illegal nature
-    will be addressed immediately and are not subject to 3 strikes or forgiveness.
+- Extreme violations of a threatening, abusive, destructive or illegal nature
+  will be addressed immediately and are not subject to 3 strikes or forgiveness.
 
-* Contact [xuri.me](https://xuri.me) to report abuse or appeal violations. In the case of
-    appeals, we know that mistakes happen, and we'll work with you to come up with a
-    fair solution if there has been a misunderstanding.
+- Contact [xuri.me](https://xuri.me) to report abuse or appeal violations. In the case of
+  appeals, we know that mistakes happen, and we'll work with you to come up with a
+  fair solution if there has been a misunderstanding.
 
 ## Coding Style
 
@@ -441,7 +441,7 @@ Most functions that use a Context should accept it as their first parameter.
 
 ### Do Not Discard Errors
 
-Do not discard errors using _ variables. If a function returns an error,
+Do not discard errors using \_ variables. If a function returns an error,
 check it to make sure the function succeeded. Handle the error, return it, or,
 in truly exceptional situations, panic.
 
