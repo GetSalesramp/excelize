@@ -451,7 +451,7 @@ func TestGetCellHyperLink(t *testing.T) {
 	link, target, err := f.GetCellHyperLink("Sheet1", "A22")
 	assert.NoError(t, err)
 	assert.Equal(t, link, true)
-	assert.Equal(t, target, "https://github.com/Aymeric-Henry/excelize")
+	assert.Equal(t, target, "https://github.com/xuri/excelize")
 
 	link, target, err = f.GetCellHyperLink("Sheet2", "D6")
 	assert.NoError(t, err)
