@@ -5686,7 +5686,7 @@ func (fn *formulaFuncs) SUBTOTAL(argsList *list.List) formulaArg {
 //
 //	SUM(number1,[number2],...)
 func (fn *formulaFuncs) SUM(argsList *list.List) formulaArg {
-	var sum float64
+	var sum float64 = 0
 	for arg := argsList.Front(); arg != nil; arg = arg.Next() {
 		token := arg.Value.(formulaArg)
 		switch token.Type {
@@ -5726,11 +5726,9 @@ func (fn *formulaFuncs) SUMIF(argsList *list.List) formulaArg {
 	if argsList.Len() == 3 {
 		sumRange = argsList.Back().Value.(formulaArg).Matrix
 	}
-	var sum float64
+	var sum float64 = 0
 	var arg formulaArg
 	for rowIdx, row := range rangeMtx {
-		fmt.Println("Test")
-		fmt.Println(arg.Value(), criteria)
 		for colIdx, cell := range row {
 			arg = cell
 			if arg.Type == ArgEmpty {
@@ -5739,12 +5737,9 @@ func (fn *formulaFuncs) SUMIF(argsList *list.List) formulaArg {
 			if ok, _ := formulaCriteriaEval(arg.Value(), criteria); ok {
 				if argsList.Len() == 3 {
 					if len(sumRange) > rowIdx && len(sumRange[rowIdx]) > colIdx {
-						fmt.Println("HERE")
 						arg = sumRange[rowIdx][colIdx]
 					}
 				}
-				fmt.Println(arg.Type, arg.Number, arg.Value())
-				fmt.Println(arg.Type == ArgNumber)
 
 				if arg.Type == ArgNumber {
 					sum += arg.Number
