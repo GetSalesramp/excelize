@@ -7861,7 +7861,7 @@ func (fn *formulaFuncs) COUNTUNIQUE(argsList *list.List) formulaArg {
 		case ArgMatrix:
 			for _, row := range arg.Matrix {
 				for _, cell := range row {
-					if cell.Type == ArgNumber {
+					if cell.Type == ArgNumber || cell.Type == ArgString {
 						_, ok := dict[cell.Value()]
 						if ok == false {
 							dict[cell.Value()] = true
