@@ -7847,12 +7847,10 @@ func (fn *formulaFuncs) COUNTUNIQUE(argsList *list.List) formulaArg {
 		arg := token.Value.(formulaArg)
 		switch arg.Type {
 		case ArgString:
-			if num := arg.ToNumber(); num.Type == ArgNumber {
-				_, ok := dict[arg.Value()]
-				if ok == false {
-					dict[arg.Value()] = true
-					count++
-				}
+			_, ok := dict[arg.Value()]
+			if ok == false {
+				dict[arg.Value()] = true
+				count++
 			}
 		case ArgNumber:
 			_, ok := dict[arg.Value()]
