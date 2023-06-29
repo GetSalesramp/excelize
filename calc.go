@@ -7800,8 +7800,8 @@ func (fn *formulaFuncs) COUNTIF(argsList *list.List) formulaArg {
 
 // formulaIfsMatch function returns cells reference array which match criteria.
 func formulaIfsMatch(args []formulaArg) (cellRefs []cellRef) {
+	var match []cellRef
 	for i := 0; i < len(args)-1; i += 2 {
-		var match []cellRef
 		matrix, criteria := args[i].Matrix, formulaCriteriaParser(args[i+1].Value())
 		if i == 0 {
 			for rowIdx, row := range matrix {
@@ -7819,16 +7819,23 @@ func formulaIfsMatch(args []formulaArg) (cellRefs []cellRef) {
 				if len(matrix[ref.Row]) <= ref.Col {
 					return
 				}
-
 				value := matrix[ref.Row][ref.Col]
-				if ok, _ := formulaCriteriaEval(value.Value(), criteria); ok {
-					match = append(match, ref)
+				if ok, _ := formulaCriteriaEval(value.Value(), criteria); !ok {
+					filtered := []cellRef{}
+					for _, cell := range match {
+						if cell.Col != ref.Col || cell.Row != ref.Row || cell.Sheet != ref.Sheet {
+							filtered = append(filtered, cell)
+						}
+					}
+					cellRefs = filtered
+					match = filtered
 				}
 			}
 		}
 		if len(match) == 0 {
 			return
 		}
+
 		cellRefs = match[:]
 	}
 	return
