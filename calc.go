@@ -7813,6 +7813,13 @@ func formulaIfsMatch(args []formulaArg) (cellRefs []cellRef) {
 			}
 		} else {
 			for _, ref := range cellRefs {
+				if len(matrix) <= ref.Row {
+					return
+				}
+				if len(matrix[ref.Row]) <= ref.Col {
+					return
+				}
+
 				value := matrix[ref.Row][ref.Col]
 				if ok, _ := formulaCriteriaEval(value.Value(), criteria); ok {
 					match = append(match, ref)
