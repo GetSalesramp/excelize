@@ -26,7 +26,7 @@ import (
 // For example:
 //
 //	f := NewFile()
-func NewFile() *File {
+func NewFile(opts ...Options) *File {
 	f := newFile()
 	f.Pkg.Store("_rels/.rels", []byte(xml.Header+templateRels))
 	f.Pkg.Store(defaultXMLPathDocPropsApp, []byte(xml.Header+templateDocpropsApp))
@@ -39,12 +39,8 @@ func NewFile() *File {
 	f.Pkg.Store(defaultXMLPathContentTypes, []byte(xml.Header+templateContentTypes))
 	f.SheetCount = 1
 	f.CalcChain, _ = f.calcChainReader()
-	f.Comments = make(map[string]*xlsxComments)
 	f.ContentTypes, _ = f.contentTypesReader()
-	f.Drawings = sync.Map{}
 	f.Styles, _ = f.stylesReader()
-	f.DecodeVMLDrawing = make(map[string]*decodeVmlDrawing)
-	f.VMLDrawing = make(map[string]*vmlDrawing)
 	f.WorkBook, _ = f.workbookReader()
 	f.Relationships = sync.Map{}
 	rels, _ := f.relsReader(defaultXMLPathWorkbookRels)
@@ -53,6 +49,7 @@ func NewFile() *File {
 	ws, _ := f.workSheetReader("Sheet1")
 	f.Sheet.Store("xl/worksheets/sheet1.xml", ws)
 	f.Theme, _ = f.themeReader()
+	f.options = getOptions(opts...)
 	return f
 }
 

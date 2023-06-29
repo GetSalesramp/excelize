@@ -12,8 +12,10 @@
 package excelize
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,17 +23,24 @@ import (
 	"unicode/utf8"
 )
 
+var (
+	expressionFormat = regexp.MustCompile(`"(?:[^"]|"")*"|\S+`)
+	conditionFormat  = regexp.MustCompile(`(or|\|\|)`)
+	blankFormat      = regexp.MustCompile("blanks|nonblanks")
+	matchFormat      = regexp.MustCompile("[*?]")
+)
+
 // parseTableOptions provides a function to parse the format settings of the
 // table with default value.
-func parseTableOptions(opts *TableOptions) (*TableOptions, error) {
+func parseTableOptions(opts *Table) (*Table, error) {
 	var err error
 	if opts == nil {
-		return &TableOptions{ShowRowStripes: boolPtr(true)}, err
+		return &Table{ShowRowStripes: boolPtr(true)}, err
 	}
 	if opts.ShowRowStripes == nil {
 		opts.ShowRowStripes = boolPtr(true)
 	}
-	if err = checkTableName(opts.Name); err != nil {
+	if err = checkDefinedName(opts.Name); err != nil {
 		return opts, err
 	}
 	return opts, err
@@ -41,12 +50,13 @@ func parseTableOptions(opts *TableOptions) (*TableOptions, error) {
 // name, range reference and format set. For example, create a table of A1:D5
 // on Sheet1:
 //
-//	err := f.AddTable("Sheet1", "A1:D5", nil)
+//	err := f.AddTable("Sheet1", &excelize.Table{Range: "A1:D5"})
 //
 // Create a table of F2:H6 on Sheet2 with format set:
 //
 //	disable := false
-//	err := f.AddTable("Sheet2", "F2:H6", &excelize.TableOptions{
+//	err := f.AddTable("Sheet2", &excelize.Table{
+//	    Range:             "F2:H6",
 //	    Name:              "table",
 //	    StyleName:         "TableStyleMedium2",
 //	    ShowFirstColumn:   true,
@@ -69,13 +79,30 @@ func parseTableOptions(opts *TableOptions) (*TableOptions, error) {
 //	TableStyleLight1 - TableStyleLight21
 //	TableStyleMedium1 - TableStyleMedium28
 //	TableStyleDark1 - TableStyleDark11
-func (f *File) AddTable(sheet, rangeRef string, opts *TableOptions) error {
-	options, err := parseTableOptions(opts)
+func (f *File) AddTable(sheet string, table *Table) error {
+	options, err := parseTableOptions(table)
 	if err != nil {
 		return err
 	}
+	var exist bool
+	f.Pkg.Range(func(k, v interface{}) bool {
+		if strings.Contains(k.(string), "xl/tables/table") {
+			var t xlsxTable
+			if err := f.xmlNewDecoder(bytes.NewReader(namespaceStrictToTransitional(v.([]byte)))).
+				Decode(&t); err != nil && err != io.EOF {
+				return true
+			}
+			if exist = t.Name == options.Name; exist {
+				return false
+			}
+		}
+		return true
+	})
+	if exist {
+		return ErrExistsTableName
+	}
 	// Coordinate conversion, convert C1:B3 to 2,0,1,2.
-	coordinates, err := rangeRefToCoordinates(rangeRef)
+	coordinates, err := rangeRefToCoordinates(options.Range)
 	if err != nil {
 		return err
 	}
@@ -162,13 +189,13 @@ func (f *File) setTableHeader(sheet string, showHeaderRow bool, x1, y1, x2 int) 
 	return tableColumns, nil
 }
 
-// checkSheetName check whether there are illegal characters in the table name.
-// Verify that the name:
+// checkDefinedName check whether there are illegal characters in the defined
+// name or table name. Verify that the name:
 // 1. Starts with a letter or underscore (_)
 // 2. Doesn't include a space or character that isn't allowed
-func checkTableName(name string) error {
+func checkDefinedName(name string) error {
 	if utf8.RuneCountInString(name) > MaxFieldLength {
-		return ErrTableNameLength
+		return ErrNameLength
 	}
 	for i, c := range name {
 		if string(c) == "_" {
@@ -180,14 +207,14 @@ func checkTableName(name string) error {
 		if i > 0 && unicode.IsDigit(c) {
 			continue
 		}
-		return newInvalidTableNameError(name)
+		return newInvalidNameError(name)
 	}
 	return nil
 }
 
 // addTable provides a function to add table by given worksheet name,
 // range reference and format set.
-func (f *File) addTable(sheet, tableXML string, x1, y1, x2, y2, i int, opts *TableOptions) error {
+func (f *File) addTable(sheet, tableXML string, x1, y1, x2, y2, i int, opts *Table) error {
 	// Correct the minimum number of rows, the table at least two lines.
 	if y1 == y2 {
 		y2++
@@ -293,7 +320,7 @@ func (f *File) addTable(sheet, tableXML string, x1, y1, x2, y2, i int, opts *Tab
 //	x == *b      // ends with b
 //	x != *b      // doesn't end with b
 //	x == *b*     // contains b
-//	x != *b*     // doesn't contains b
+//	x != *b*     // doesn't contain b
 //
 // You can also use '*' to match any character or number and '?' to match any
 // single character or number. No other regular expression quantifier is
@@ -380,8 +407,7 @@ func (f *File) autoFilter(sheet, ref string, columns, col int, opts []AutoFilter
 			return fmt.Errorf("incorrect index of column '%s'", opt.Column)
 		}
 		fc := &xlsxFilterColumn{ColID: offset}
-		re := regexp.MustCompile(`"(?:[^"]|"")*"|\S+`)
-		token := re.FindAllString(opt.Expression, -1)
+		token := expressionFormat.FindAllString(opt.Expression, -1)
 		if len(token) != 3 && len(token) != 7 {
 			return fmt.Errorf("incorrect number of tokens in criteria '%s'", opt.Expression)
 		}
@@ -404,22 +430,23 @@ func (f *File) writeAutoFilter(fc *xlsxFilterColumn, exp []int, tokens []string)
 		var filters []*xlsxFilter
 		filters = append(filters, &xlsxFilter{Val: tokens[0]})
 		fc.Filters = &xlsxFilters{Filter: filters}
-	} else if len(exp) == 3 && exp[0] == 2 && exp[1] == 1 && exp[2] == 2 {
+		return
+	}
+	if len(exp) == 3 && exp[0] == 2 && exp[1] == 1 && exp[2] == 2 {
 		// Double equality with "or" operator.
 		var filters []*xlsxFilter
 		for _, v := range tokens {
 			filters = append(filters, &xlsxFilter{Val: v})
 		}
 		fc.Filters = &xlsxFilters{Filter: filters}
-	} else {
-		// Non default custom filter.
-		expRel := map[int]int{0: 0, 1: 2}
-		andRel := map[int]bool{0: true, 1: false}
-		for k, v := range tokens {
-			f.writeCustomFilter(fc, exp[expRel[k]], v)
-			if k == 1 {
-				fc.CustomFilters.And = andRel[exp[k]]
-			}
+		return
+	}
+	// Non default custom filter.
+	expRel, andRel := map[int]int{0: 0, 1: 2}, map[int]bool{0: true, 1: false}
+	for k, v := range tokens {
+		f.writeCustomFilter(fc, exp[expRel[k]], v)
+		if k == 1 {
+			fc.CustomFilters.And = andRel[exp[k]]
 		}
 	}
 }
@@ -441,11 +468,11 @@ func (f *File) writeCustomFilter(fc *xlsxFilterColumn, operator int, val string)
 	}
 	if fc.CustomFilters != nil {
 		fc.CustomFilters.CustomFilter = append(fc.CustomFilters.CustomFilter, &customFilter)
-	} else {
-		var customFilters []*xlsxCustomFilter
-		customFilters = append(customFilters, &customFilter)
-		fc.CustomFilters = &xlsxCustomFilters{CustomFilter: customFilters}
+		return
 	}
+	var customFilters []*xlsxCustomFilter
+	customFilters = append(customFilters, &customFilter)
+	fc.CustomFilters = &xlsxCustomFilters{CustomFilter: customFilters}
 }
 
 // parseFilterExpression provides a function to converts the tokens of a
@@ -462,10 +489,8 @@ func (f *File) parseFilterExpression(expression string, tokens []string) ([]int,
 	if len(tokens) == 7 {
 		// The number of tokens will be either 3 (for 1 expression) or 7 (for 2
 		// expressions).
-		conditional := 0
-		c := tokens[3]
-		re, _ := regexp.Match(`(or|\|\|)`, []byte(c))
-		if re {
+		conditional, c := 0, tokens[3]
+		if conditionFormat.MatchString(c) {
 			conditional = 1
 		}
 		expression1, token1, err := f.parseFilterTokens(expression, tokens[:3])
@@ -476,17 +501,13 @@ func (f *File) parseFilterExpression(expression string, tokens []string) ([]int,
 		if err != nil {
 			return expressions, t, err
 		}
-		expressions = []int{expression1[0], conditional, expression2[0]}
-		t = []string{token1, token2}
-	} else {
-		exp, token, err := f.parseFilterTokens(expression, tokens)
-		if err != nil {
-			return expressions, t, err
-		}
-		expressions = exp
-		t = []string{token}
+		return []int{expression1[0], conditional, expression2[0]}, []string{token1, token2}, nil
 	}
-	return expressions, t, nil
+	exp, token, err := f.parseFilterTokens(expression, tokens)
+	if err != nil {
+		return expressions, t, err
+	}
+	return exp, []string{token}, nil
 }
 
 // parseFilterTokens provides a function to parse the 3 tokens of a filter
@@ -509,11 +530,11 @@ func (f *File) parseFilterTokens(expression string, tokens []string) ([]int, str
 	operator, ok := operators[strings.ToLower(tokens[1])]
 	if !ok {
 		// Convert the operator from a number to a descriptive string.
-		return []int{}, "", fmt.Errorf("unknown operator: %s", tokens[1])
+		return []int{}, "", newUnknownFilterTokenError(tokens[1])
 	}
 	token := tokens[2]
 	// Special handling for Blanks/NonBlanks.
-	re, _ := regexp.Match("blanks|nonblanks", []byte(strings.ToLower(token)))
+	re := blankFormat.MatchString(strings.ToLower(token))
 	if re {
 		// Only allow Equals or NotEqual in this context.
 		if operator != 2 && operator != 5 {
@@ -538,8 +559,7 @@ func (f *File) parseFilterTokens(expression string, tokens []string) ([]int, str
 	}
 	// If the string token contains an Excel match character then change the
 	// operator type to indicate a non "simple" equality.
-	re, _ = regexp.Match("[*?]", []byte(token))
-	if operator == 2 && re {
+	if re = matchFormat.MatchString(token); operator == 2 && re {
 		operator = 22
 	}
 	return []int{operator}, token, nil

@@ -21,7 +21,8 @@ import (
 	"github.com/xuri/nfp"
 )
 
-// languageInfo defined the required fields of localization support for number format.
+// languageInfo defined the required fields of localization support for number
+// format.
 type languageInfo struct {
 	apFmt      string
 	tags       []string
@@ -31,26 +32,683 @@ type languageInfo struct {
 // numberFormat directly maps the number format parser runtime required
 // fields.
 type numberFormat struct {
-	section                                        []nfp.Section
-	t                                              time.Time
-	sectionIdx                                     int
-	date1904, isNumeric, hours, seconds            bool
-	number                                         float64
-	ap, localCode, result, value, valueSectionType string
+	opts                                                        *Options
+	cellType                                                    CellType
+	section                                                     []nfp.Section
+	t                                                           time.Time
+	sectionIdx                                                  int
+	date1904, isNumeric, hours, seconds, useMillisecond         bool
+	number                                                      float64
+	ap, localCode, result, value, valueSectionType              string
+	switchArgument, currencyString                              string
+	fracHolder, fracPadding, intHolder, intPadding, expBaseLen  int
+	percent                                                     int
+	useCommaSep, usePointer, usePositive, useScientificNotation bool
 }
 
+// CultureName is the type of supported language country codes types for apply
+// number format.
+type CultureName byte
+
+// This section defines the currently supported country code types enumeration
+// for apply number format.
+const (
+	CultureNameUnknown CultureName = iota
+	CultureNameEnUS
+	CultureNameZhCN
+)
+
 var (
+	// Excel styles can reference number formats that are built-in, all of which
+	// have an id less than 164. Note that this number format code list is under
+	// English localization.
+	builtInNumFmt = map[int]string{
+		0:  "general",
+		1:  "0",
+		2:  "0.00",
+		3:  "#,##0",
+		4:  "#,##0.00",
+		9:  "0%",
+		10: "0.00%",
+		11: "0.00E+00",
+		12: "# ?/?",
+		13: "# ??/??",
+		14: "mm-dd-yy",
+		15: "d-mmm-yy",
+		16: "d-mmm",
+		17: "mmm-yy",
+		18: "h:mm AM/PM",
+		19: "h:mm:ss AM/PM",
+		20: "hh:mm",
+		21: "hh:mm:ss",
+		22: "m/d/yy hh:mm",
+		37: "#,##0 ;(#,##0)",
+		38: "#,##0 ;[red](#,##0)",
+		39: "#,##0.00 ;(#,##0.00)",
+		40: "#,##0.00 ;[red](#,##0.00)",
+		41: `_(* #,##0_);_(* \(#,##0\);_(* "-"_);_(@_)`,
+		42: `_("$"* #,##0_);_("$"* \(#,##0\);_("$"* "-"_);_(@_)`,
+		43: `_(* #,##0.00_);_(* \(#,##0.00\);_(* "-"??_);_(@_)`,
+		44: `_("$"* #,##0.00_);_("$"* \(#,##0.00\);_("$"* "-"??_);_(@_)`,
+		45: "mm:ss",
+		46: "[h]:mm:ss",
+		47: "mm:ss.0",
+		48: "##0.0E+0",
+		49: "@",
+	}
+	// langNumFmt defined number format code provided for language glyphs where
+	// they occur in different language.
+	langNumFmt = map[string]map[int]string{
+		"zh-tw": {
+			27: "[$-404]e/m/d",
+			28: `[$-404]e"年"m"月"d"日"`,
+			29: `[$-404]e"年"m"月"d"日"`,
+			30: "m/d/yy",
+			31: `yyyy"年"m"月"d"日"`,
+			32: `hh"時"mm"分"`,
+			33: `hh"時"mm"分"ss"秒"`,
+			34: `上午/下午 hh"時"mm"分"`,
+			35: `上午/下午 hh"時"mm"分"ss"秒"`,
+			36: "[$-404]e/m/d",
+			50: "[$-404]e/m/d",
+			51: `[$-404]e"年"m"月"d"日"`,
+			52: `上午/下午 hh"時"mm"分"`,
+			53: `上午/下午 hh"時"mm"分"ss"秒"`,
+			54: `[$-404]e"年"m"月"d"日"`,
+			55: `上午/下午 hh"時"mm"分"`,
+			56: `上午/下午 hh"時"mm"分"ss"秒"`,
+			57: "[$-404]e/m/d",
+			58: `[$-404]e"年"m"月"d"日"`,
+		},
+		"zh-cn": {
+			27: `yyyy"年"m"月"`,
+			28: `m"月"d"日"`,
+			29: `m"月"d"日"`,
+			30: "m/d/yy",
+			31: `yyyy"年"m"月"d"日"`,
+			32: `h"时"mm"分"`,
+			33: `h"时"mm"分"ss"秒"`,
+			34: `上午/下午 h"时"mm"分"`,
+			35: `上午/下午 h"时"mm"分"ss"秒"`,
+			36: `yyyy"年"m"月"`,
+			50: `yyyy"年"m"月"`,
+			51: `m"月"d"日"`,
+			52: `yyyy"年"m"月"`,
+			53: `m"月"d"日"`,
+			54: `m"月"d"日"`,
+			55: `上午/下午 h"时"mm"分"`,
+			56: `上午/下午 h"时"mm"分"ss"秒"`,
+			57: `yyyy"年"m"月"`,
+			58: `m"月"d"日"`,
+		},
+		"ja-jp": {
+			27: "[$-411]ge.m.d",
+			28: `[$-411]ggge"年"m"月"d"日"`,
+			29: `[$-411]ggge"年"m"月"d"日"`,
+			30: "m/d/yy",
+			31: `yyyy"年"m"月"d"日"`,
+			32: `h"時"mm"分"`,
+			33: `h"時"mm"分"ss"秒"`,
+			34: `yyyy"年"m"月"`,
+			35: `m"月"d"日"`,
+			36: "[$-411]ge.m.d",
+			50: "[$-411]ge.m.d",
+			51: `[$-411]ggge"年"m"月"d"日"`,
+			52: `yyyy"年"m"月"`,
+			53: `m"月"d"日"`,
+			54: `[$-411]ggge"年"m"月"d"日"`,
+			55: `yyyy"年"m"月"`,
+			56: `m"月"d"日"`,
+			57: "[$-411]ge.m.d",
+			58: `[$-411]ggge"年"m"月"d"日"`,
+		},
+		"ko-kr": {
+			27: `yyyy"年" mm"月" dd"日"`,
+			28: "mm-dd",
+			29: "mm-dd",
+			30: "mm-dd-yy",
+			31: `yyyy"년" mm"월" dd"일"`,
+			32: `h"시" mm"분"`,
+			33: `h"시" mm"분" ss"초"`,
+			34: `yyyy-mm-dd`,
+			35: `yyyy-mm-dd`,
+			36: `yyyy"年" mm"月" dd"日"`,
+			50: `yyyy"年" mm"月" dd"日"`,
+			51: "mm-dd",
+			52: "yyyy-mm-dd",
+			53: "yyyy-mm-dd",
+			54: "mm-dd",
+			55: "yyyy-mm-dd",
+			56: "yyyy-mm-dd",
+			57: `yyyy"年" mm"月" dd"日"`,
+			58: "mm-dd",
+		},
+		"th-th": {
+			59: "t0",
+			60: "t0.00",
+			61: "t#,##0",
+			62: "t#,##0.00",
+			67: "t0%",
+			68: "t0.00%",
+			69: "t# ?/?",
+			70: "t# ??/??",
+			71: "ว/ด/ปปปป",
+			72: "ว-ดดด-ปป",
+			73: "ว-ดดด",
+			74: "ดดด-ปป",
+			75: "ช:นน",
+			76: "ช:นน:ทท",
+			77: "ว/ด/ปปปป ช:นน",
+			78: "นน:ทท",
+			79: "[ช]:นน:ทท",
+			80: "นน:ทท.0",
+			81: "d/m/bb",
+		},
+	}
+	// currencyNumFmt defined the currency number format map.
+	currencyNumFmt = map[int]string{
+		164: `"¥"#,##0.00`,
+		165: "[$$-409]#,##0.00",
+		166: "[$$-45C]#,##0.00",
+		167: "[$$-1004]#,##0.00",
+		168: "[$$-404]#,##0.00",
+		169: "[$$-C09]#,##0.00",
+		170: "[$$-2809]#,##0.00",
+		171: "[$$-1009]#,##0.00",
+		172: "[$$-2009]#,##0.00",
+		173: "[$$-1409]#,##0.00",
+		174: "[$$-4809]#,##0.00",
+		175: "[$$-2C09]#,##0.00",
+		176: "[$$-2409]#,##0.00",
+		177: "[$$-1000]#,##0.00",
+		178: `#,##0.00\ [$$-C0C]`,
+		179: "[$$-475]#,##0.00",
+		180: "[$$-83E]#,##0.00",
+		181: `[$$-86B]\ #,##0.00`,
+		182: `[$$-340A]\ #,##0.00`,
+		183: "[$$-240A]#,##0.00",
+		184: `[$$-300A]\ #,##0.00`,
+		185: "[$$-440A]#,##0.00",
+		186: "[$$-80A]#,##0.00",
+		187: "[$$-500A]#,##0.00",
+		188: "[$$-540A]#,##0.00",
+		189: `[$$-380A]\ #,##0.00`,
+		190: "[$£-809]#,##0.00",
+		191: "[$£-491]#,##0.00",
+		192: "[$£-452]#,##0.00",
+		193: "[$¥-804]#,##0.00",
+		194: "[$¥-411]#,##0.00",
+		195: "[$¥-478]#,##0.00",
+		196: "[$¥-451]#,##0.00",
+		197: "[$¥-480]#,##0.00",
+		198: "#,##0.00\\ [$\u058F-42B]",
+		199: "[$\u060B-463]#,##0.00",
+		200: "[$\u060B-48C]#,##0.00",
+		201: "[$\u09F3-845]\\ #,##0.00",
+		202: "#,##0.00[$\u17DB-453]",
+		203: "[$\u20A1-140A]#,##0.00",
+		204: "[$\u20A6-468]\\ #,##0.00",
+		205: "[$\u20A6-470]\\ #,##0.00",
+		206: "[$\u20A9-412]#,##0.00",
+		207: "[$\u20AA-40D]\\ #,##0.00",
+		208: "#,##0.00\\ [$\u20AB-42A]",
+		209: "#,##0.00\\ [$\u20AC-42D]",
+		210: "#,##0.00\\ [$\u20AC-47E]",
+		211: "#,##0.00\\ [$\u20AC-403]",
+		212: "#,##0.00\\ [$\u20AC-483]",
+		213: "[$\u20AC-813]\\ #,##0.00",
+		214: "[$\u20AC-413]\\ #,##0.00",
+		215: "[$\u20AC-1809]#,##0.00",
+		216: "#,##0.00\\ [$\u20AC-425]",
+		217: "[$\u20AC-2]\\ #,##0.00",
+		218: "#,##0.00\\ [$\u20AC-1]",
+		219: "#,##0.00\\ [$\u20AC-40B]",
+		220: "#,##0.00\\ [$\u20AC-80C]",
+		221: "#,##0.00\\ [$\u20AC-40C]",
+		222: "#,##0.00\\ [$\u20AC-140C]",
+		223: "#,##0.00\\ [$\u20AC-180C]",
+		224: "[$\u20AC-200C]#,##0.00",
+		225: "#,##0.00\\ [$\u20AC-456]",
+		226: "#,##0.00\\ [$\u20AC-C07]",
+		227: "#,##0.00\\ [$\u20AC-407]",
+		228: "#,##0.00\\ [$\u20AC-1007]",
+		229: "#,##0.00\\ [$\u20AC-408]",
+		230: "#,##0.00\\ [$\u20AC-243B]",
+		231: "[$\u20AC-83C]#,##0.00",
+		232: "[$\u20AC-410]\\ #,##0.00",
+		233: "[$\u20AC-476]#,##0.00",
+		234: "#,##0.00\\ [$\u20AC-2C1A]",
+		235: "[$\u20AC-426]\\ #,##0.00",
+		236: "#,##0.00\\ [$\u20AC-427]",
+		237: "#,##0.00\\ [$\u20AC-82E]",
+		238: "#,##0.00\\ [$\u20AC-46E]",
+		239: "[$\u20AC-43A]#,##0.00",
+		240: "#,##0.00\\ [$\u20AC-C3B]",
+		241: "#,##0.00\\ [$\u20AC-482]",
+		242: "#,##0.00\\ [$\u20AC-816]",
+		243: "#,##0.00\\ [$\u20AC-301A]",
+		244: "#,##0.00\\ [$\u20AC-203B]",
+		245: "#,##0.00\\ [$\u20AC-41B]",
+		246: "#,##0.00\\ [$\u20AC-424]",
+		247: "#,##0.00\\ [$\u20AC-C0A]",
+		248: "#,##0.00\\ [$\u20AC-81D]",
+		249: "#,##0.00\\ [$\u20AC-484]",
+		250: "#,##0.00\\ [$\u20AC-42E]",
+		251: "[$\u20AC-462]\\ #,##0.00",
+		252: "#,##0.00\\ [$₭-454]",
+		253: "#,##0.00\\ [$₮-450]",
+		254: "[$\u20AE-C50]#,##0.00",
+		255: "[$\u20B1-3409]#,##0.00",
+		256: "[$\u20B1-464]#,##0.00",
+		257: "#,##0.00[$\u20B4-422]",
+		258: "[$\u20B8-43F]#,##0.00",
+		259: "[$\u20B9-460]#,##0.00",
+		260: "[$\u20B9-4009]\\ #,##0.00",
+		261: "[$\u20B9-447]\\ #,##0.00",
+		262: "[$\u20B9-439]\\ #,##0.00",
+		263: "[$\u20B9-44B]\\ #,##0.00",
+		264: "[$\u20B9-860]#,##0.00",
+		265: "[$\u20B9-457]\\ #,##0.00",
+		266: "[$\u20B9-458]#,##0.00",
+		267: "[$\u20B9-44E]\\ #,##0.00",
+		268: "[$\u20B9-861]#,##0.00",
+		269: "[$\u20B9-448]\\ #,##0.00",
+		270: "[$\u20B9-446]\\ #,##0.00",
+		271: "[$\u20B9-44F]\\ #,##0.00",
+		272: "[$\u20B9-459]#,##0.00",
+		273: "[$\u20B9-449]\\ #,##0.00",
+		274: "[$\u20B9-820]#,##0.00",
+		275: "#,##0.00\\ [$\u20BA-41F]",
+		276: "#,##0.00\\ [$\u20BC-42C]",
+		277: "#,##0.00\\ [$\u20BC-82C]",
+		278: "#,##0.00\\ [$\u20BD-419]",
+		279: "#,##0.00[$\u20BD-485]",
+		280: "#,##0.00\\ [$\u20BE-437]",
+		281: "[$B/.-180A]\\ #,##0.00",
+		282: "[$Br-472]#,##0.00",
+		283: "[$Br-477]#,##0.00",
+		284: "#,##0.00[$Br-473]",
+		285: "[$Bs-46B]\\ #,##0.00",
+		286: "[$Bs-400A]\\ #,##0.00",
+		287: "[$Bs.-200A]\\ #,##0.00",
+		288: "[$BWP-832]\\ #,##0.00",
+		289: "[$C$-4C0A]#,##0.00",
+		290: "[$CA$-85D]#,##0.00",
+		291: "[$CA$-47C]#,##0.00",
+		292: "[$CA$-45D]#,##0.00",
+		293: "[$CFA-340C]#,##0.00",
+		294: "[$CFA-280C]#,##0.00",
+		295: "#,##0.00\\ [$CFA-867]",
+		296: "#,##0.00\\ [$CFA-488]",
+		297: "#,##0.00\\ [$CHF-100C]",
+		298: "[$CHF-1407]\\ #,##0.00",
+		299: "[$CHF-807]\\ #,##0.00",
+		300: "[$CHF-810]\\ #,##0.00",
+		301: "[$CHF-417]\\ #,##0.00",
+		302: "[$CLP-47A]\\ #,##0.00",
+		303: "[$CN¥-850]#,##0.00",
+		304: "#,##0.00\\ [$DZD-85F]",
+		305: "[$FCFA-2C0C]#,##0.00",
+		306: "#,##0.00\\ [$Ft-40E]",
+		307: "[$G-3C0C]#,##0.00",
+		308: "[$Gs.-3C0A]\\ #,##0.00",
+		309: "[$GTQ-486]#,##0.00",
+		310: "[$HK$-C04]#,##0.00",
+		311: "[$HK$-3C09]#,##0.00",
+		312: "#,##0.00\\ [$HRK-41A]",
+		313: "[$IDR-3809]#,##0.00",
+		314: "[$IQD-492]#,##0.00",
+		315: "#,##0.00\\ [$ISK-40F]",
+		316: "[$K-455]#,##0.00",
+		317: "#,##0.00\\ [$K\u010D-405]",
+		318: "#,##0.00\\ [$KM-141A]",
+		319: "#,##0.00\\ [$KM-101A]",
+		320: "#,##0.00\\ [$KM-181A]",
+		321: "[$kr-438]\\ #,##0.00",
+		322: "[$kr-43B]\\ #,##0.00",
+		323: "#,##0.00\\ [$kr-83B]",
+		324: "[$kr-414]\\ #,##0.00",
+		325: "[$kr-814]\\ #,##0.00",
+		326: "#,##0.00\\ [$kr-41D]",
+		327: "[$kr.-406]\\ #,##0.00",
+		328: "[$kr.-46F]\\ #,##0.00",
+		329: "[$Ksh-441]#,##0.00",
+		330: "[$L-818]#,##0.00",
+		331: "[$L-819]#,##0.00",
+		332: "[$L-480A]\\ #,##0.00",
+		333: "#,##0.00\\ [$Lek\u00EB-41C]",
+		334: "[$MAD-45F]#,##0.00",
+		335: "[$MAD-380C]#,##0.00",
+		336: "#,##0.00\\ [$MAD-105F]",
+		337: "[$MOP$-1404]#,##0.00",
+		338: "#,##0.00\\ [$MVR-465]_-",
+		339: "#,##0.00[$Nfk-873]",
+		340: "[$NGN-466]#,##0.00",
+		341: "[$NGN-467]#,##0.00",
+		342: "[$NGN-469]#,##0.00",
+		343: "[$NGN-471]#,##0.00",
+		344: "[$NOK-103B]\\ #,##0.00",
+		345: "[$NOK-183B]\\ #,##0.00",
+		346: "[$NZ$-481]#,##0.00",
+		347: "[$PKR-859]\\ #,##0.00",
+		348: "[$PYG-474]#,##0.00",
+		349: "[$Q-100A]#,##0.00",
+		350: "[$R-436]\\ #,##0.00",
+		351: "[$R-1C09]\\ #,##0.00",
+		352: "[$R-435]\\ #,##0.00",
+		353: "[$R$-416]\\ #,##0.00",
+		354: "[$RD$-1C0A]#,##0.00",
+		355: "#,##0.00\\ [$RF-487]",
+		356: "[$RM-4409]#,##0.00",
+		357: "[$RM-43E]#,##0.00",
+		358: "#,##0.00\\ [$RON-418]",
+		359: "[$Rp-421]#,##0.00",
+		360: "[$Rs-420]#,##0.00_-",
+		361: "[$Rs.-849]\\ #,##0.00",
+		362: "#,##0.00\\ [$RSD-81A]",
+		363: "#,##0.00\\ [$RSD-C1A]",
+		364: "#,##0.00\\ [$RUB-46D]",
+		365: "#,##0.00\\ [$RUB-444]",
+		366: "[$S/.-C6B]\\ #,##0.00",
+		367: "[$S/.-280A]\\ #,##0.00",
+		368: "#,##0.00\\ [$SEK-143B]",
+		369: "#,##0.00\\ [$SEK-1C3B]",
+		370: "#,##0.00\\ [$so\u02BBm-443]",
+		371: "#,##0.00\\ [$so\u02BBm-843]",
+		372: "#,##0.00\\ [$SYP-45A]",
+		373: "[$THB-41E]#,##0.00",
+		374: "#,##0.00[$TMT-442]",
+		375: "[$US$-3009]#,##0.00",
+		376: "[$ZAR-46C]\\ #,##0.00",
+		377: "[$ZAR-430]#,##0.00",
+		378: "[$ZAR-431]#,##0.00",
+		379: "[$ZAR-432]\\ #,##0.00",
+		380: "[$ZAR-433]#,##0.00",
+		381: "[$ZAR-434]\\ #,##0.00",
+		382: "#,##0.00\\ [$z\u0142-415]",
+		383: "#,##0.00\\ [$\u0434\u0435\u043D-42F]",
+		384: "#,##0.00\\ [$КМ-201A]",
+		385: "#,##0.00\\ [$КМ-1C1A]",
+		386: "#,##0.00\\ [$\u043B\u0432.-402]",
+		387: "#,##0.00\\ [$р.-423]",
+		388: "#,##0.00\\ [$\u0441\u043E\u043C-440]",
+		389: "#,##0.00\\ [$\u0441\u043E\u043C-428]",
+		390: "[$\u062C.\u0645.-C01]\\ #,##0.00_-",
+		391: "[$\u062F.\u0623.-2C01]\\ #,##0.00_-",
+		392: "[$\u062F.\u0625.-3801]\\ #,##0.00_-",
+		393: "[$\u062F.\u0628.-3C01]\\ #,##0.00_-",
+		394: "[$\u062F.\u062A.-1C01]\\ #,##0.00_-",
+		395: "[$\u062F.\u062C.-1401]\\ #,##0.00_-",
+		396: "[$\u062F.\u0639.-801]\\ #,##0.00_-",
+		397: "[$\u062F.\u0643.-3401]\\ #,##0.00_-",
+		398: "[$\u062F.\u0644.-1001]#,##0.00_-",
+		399: "[$\u062F.\u0645.-1801]\\ #,##0.00_-",
+		400: "[$\u0631-846]\\ #,##0.00",
+		401: "[$\u0631.\u0633.-401]\\ #,##0.00_-",
+		402: "[$\u0631.\u0639.-2001]\\ #,##0.00_-",
+		403: "[$\u0631.\u0642.-4001]\\ #,##0.00_-",
+		404: "[$\u0631.\u064A.-2401]\\ #,##0.00_-",
+		405: "[$\u0631\u06CC\u0627\u0644-429]#,##0.00_-",
+		406: "[$\u0644.\u0633.-2801]\\ #,##0.00_-",
+		407: "[$\u0644.\u0644.-3001]\\ #,##0.00_-",
+		408: "[$\u1265\u122D-45E]#,##0.00",
+		409: "[$\u0930\u0942-461]#,##0.00",
+		410: "[$\u0DBB\u0DD4.-45B]\\ #,##0.00",
+		411: "[$ADP]\\ #,##0.00",
+		412: "[$AED]\\ #,##0.00",
+		413: "[$AFA]\\ #,##0.00",
+		414: "[$AFN]\\ #,##0.00",
+		415: "[$ALL]\\ #,##0.00",
+		416: "[$AMD]\\ #,##0.00",
+		417: "[$ANG]\\ #,##0.00",
+		418: "[$AOA]\\ #,##0.00",
+		419: "[$ARS]\\ #,##0.00",
+		420: "[$ATS]\\ #,##0.00",
+		421: "[$AUD]\\ #,##0.00",
+		422: "[$AWG]\\ #,##0.00",
+		423: "[$AZM]\\ #,##0.00",
+		424: "[$AZN]\\ #,##0.00",
+		425: "[$BAM]\\ #,##0.00",
+		426: "[$BBD]\\ #,##0.00",
+		427: "[$BDT]\\ #,##0.00",
+		428: "[$BEF]\\ #,##0.00",
+		429: "[$BGL]\\ #,##0.00",
+		430: "[$BGN]\\ #,##0.00",
+		431: "[$BHD]\\ #,##0.00",
+		432: "[$BIF]\\ #,##0.00",
+		433: "[$BMD]\\ #,##0.00",
+		434: "[$BND]\\ #,##0.00",
+		435: "[$BOB]\\ #,##0.00",
+		436: "[$BOV]\\ #,##0.00",
+		437: "[$BRL]\\ #,##0.00",
+		438: "[$BSD]\\ #,##0.00",
+		439: "[$BTN]\\ #,##0.00",
+		440: "[$BWP]\\ #,##0.00",
+		441: "[$BYR]\\ #,##0.00",
+		442: "[$BZD]\\ #,##0.00",
+		443: "[$CAD]\\ #,##0.00",
+		444: "[$CDF]\\ #,##0.00",
+		445: "[$CHE]\\ #,##0.00",
+		446: "[$CHF]\\ #,##0.00",
+		447: "[$CHW]\\ #,##0.00",
+		448: "[$CLF]\\ #,##0.00",
+		449: "[$CLP]\\ #,##0.00",
+		450: "[$CNY]\\ #,##0.00",
+		451: "[$COP]\\ #,##0.00",
+		452: "[$COU]\\ #,##0.00",
+		453: "[$CRC]\\ #,##0.00",
+		454: "[$CSD]\\ #,##0.00",
+		455: "[$CUC]\\ #,##0.00",
+		456: "[$CVE]\\ #,##0.00",
+		457: "[$CYP]\\ #,##0.00",
+		458: "[$CZK]\\ #,##0.00",
+		459: "[$DEM]\\ #,##0.00",
+		460: "[$DJF]\\ #,##0.00",
+		461: "[$DKK]\\ #,##0.00",
+		462: "[$DOP]\\ #,##0.00",
+		463: "[$DZD]\\ #,##0.00",
+		464: "[$ECS]\\ #,##0.00",
+		465: "[$ECV]\\ #,##0.00",
+		466: "[$EEK]\\ #,##0.00",
+		467: "[$EGP]\\ #,##0.00",
+		468: "[$ERN]\\ #,##0.00",
+		469: "[$ESP]\\ #,##0.00",
+		470: "[$ETB]\\ #,##0.00",
+		471: "[$EUR]\\ #,##0.00",
+		472: "[$FIM]\\ #,##0.00",
+		473: "[$FJD]\\ #,##0.00",
+		474: "[$FKP]\\ #,##0.00",
+		475: "[$FRF]\\ #,##0.00",
+		476: "[$GBP]\\ #,##0.00",
+		477: "[$GEL]\\ #,##0.00",
+		478: "[$GHC]\\ #,##0.00",
+		479: "[$GHS]\\ #,##0.00",
+		480: "[$GIP]\\ #,##0.00",
+		481: "[$GMD]\\ #,##0.00",
+		482: "[$GNF]\\ #,##0.00",
+		483: "[$GRD]\\ #,##0.00",
+		484: "[$GTQ]\\ #,##0.00",
+		485: "[$GYD]\\ #,##0.00",
+		486: "[$HKD]\\ #,##0.00",
+		487: "[$HNL]\\ #,##0.00",
+		488: "[$HRK]\\ #,##0.00",
+		489: "[$HTG]\\ #,##0.00",
+		490: "[$HUF]\\ #,##0.00",
+		491: "[$IDR]\\ #,##0.00",
+		492: "[$IEP]\\ #,##0.00",
+		493: "[$ILS]\\ #,##0.00",
+		494: "[$INR]\\ #,##0.00",
+		495: "[$IQD]\\ #,##0.00",
+		496: "[$IRR]\\ #,##0.00",
+		497: "[$ISK]\\ #,##0.00",
+		498: "[$ITL]\\ #,##0.00",
+		499: "[$JMD]\\ #,##0.00",
+		500: "[$JOD]\\ #,##0.00",
+		501: "[$JPY]\\ #,##0.00",
+		502: "[$KAF]\\ #,##0.00",
+		503: "[$KES]\\ #,##0.00",
+		504: "[$KGS]\\ #,##0.00",
+		505: "[$KHR]\\ #,##0.00",
+		506: "[$KMF]\\ #,##0.00",
+		507: "[$KPW]\\ #,##0.00",
+		508: "[$KRW]\\ #,##0.00",
+		509: "[$KWD]\\ #,##0.00",
+		510: "[$KYD]\\ #,##0.00",
+		511: "[$KZT]\\ #,##0.00",
+		512: "[$LAK]\\ #,##0.00",
+		513: "[$LBP]\\ #,##0.00",
+		514: "[$LKR]\\ #,##0.00",
+		515: "[$LRD]\\ #,##0.00",
+		516: "[$LSL]\\ #,##0.00",
+		517: "[$LTL]\\ #,##0.00",
+		518: "[$LUF]\\ #,##0.00",
+		519: "[$LVL]\\ #,##0.00",
+		520: "[$LYD]\\ #,##0.00",
+		521: "[$MAD]\\ #,##0.00",
+		522: "[$MDL]\\ #,##0.00",
+		523: "[$MGA]\\ #,##0.00",
+		524: "[$MGF]\\ #,##0.00",
+		525: "[$MKD]\\ #,##0.00",
+		526: "[$MMK]\\ #,##0.00",
+		527: "[$MNT]\\ #,##0.00",
+		528: "[$MOP]\\ #,##0.00",
+		529: "[$MRO]\\ #,##0.00",
+		530: "[$MTL]\\ #,##0.00",
+		531: "[$MUR]\\ #,##0.00",
+		532: "[$MVR]\\ #,##0.00",
+		533: "[$MWK]\\ #,##0.00",
+		534: "[$MXN]\\ #,##0.00",
+		535: "[$MXV]\\ #,##0.00",
+		536: "[$MYR]\\ #,##0.00",
+		537: "[$MZM]\\ #,##0.00",
+		538: "[$MZN]\\ #,##0.00",
+		539: "[$NAD]\\ #,##0.00",
+		540: "[$NGN]\\ #,##0.00",
+		541: "[$NIO]\\ #,##0.00",
+		542: "[$NLG]\\ #,##0.00",
+		543: "[$NOK]\\ #,##0.00",
+		544: "[$NPR]\\ #,##0.00",
+		545: "[$NTD]\\ #,##0.00",
+		546: "[$NZD]\\ #,##0.00",
+		547: "[$OMR]\\ #,##0.00",
+		548: "[$PAB]\\ #,##0.00",
+		549: "[$PEN]\\ #,##0.00",
+		550: "[$PGK]\\ #,##0.00",
+		551: "[$PHP]\\ #,##0.00",
+		552: "[$PKR]\\ #,##0.00",
+		553: "[$PLN]\\ #,##0.00",
+		554: "[$PTE]\\ #,##0.00",
+		555: "[$PYG]\\ #,##0.00",
+		556: "[$QAR]\\ #,##0.00",
+		557: "[$ROL]\\ #,##0.00",
+		558: "[$RON]\\ #,##0.00",
+		559: "[$RSD]\\ #,##0.00",
+		560: "[$RUB]\\ #,##0.00",
+		561: "[$RUR]\\ #,##0.00",
+		562: "[$RWF]\\ #,##0.00",
+		563: "[$SAR]\\ #,##0.00",
+		564: "[$SBD]\\ #,##0.00",
+		565: "[$SCR]\\ #,##0.00",
+		566: "[$SDD]\\ #,##0.00",
+		567: "[$SDG]\\ #,##0.00",
+		568: "[$SDP]\\ #,##0.00",
+		569: "[$SEK]\\ #,##0.00",
+		570: "[$SGD]\\ #,##0.00",
+		571: "[$SHP]\\ #,##0.00",
+		572: "[$SIT]\\ #,##0.00",
+		573: "[$SKK]\\ #,##0.00",
+		574: "[$SLL]\\ #,##0.00",
+		575: "[$SOS]\\ #,##0.00",
+		576: "[$SPL]\\ #,##0.00",
+		577: "[$SRD]\\ #,##0.00",
+		578: "[$SRG]\\ #,##0.00",
+		579: "[$STD]\\ #,##0.00",
+		580: "[$SVC]\\ #,##0.00",
+		581: "[$SYP]\\ #,##0.00",
+		582: "[$SZL]\\ #,##0.00",
+		583: "[$THB]\\ #,##0.00",
+		584: "[$TJR]\\ #,##0.00",
+		585: "[$TJS]\\ #,##0.00",
+		586: "[$TMM]\\ #,##0.00",
+		587: "[$TMT]\\ #,##0.00",
+		588: "[$TND]\\ #,##0.00",
+		589: "[$TOP]\\ #,##0.00",
+		590: "[$TRL]\\ #,##0.00",
+		591: "[$TRY]\\ #,##0.00",
+		592: "[$TTD]\\ #,##0.00",
+		593: "[$TWD]\\ #,##0.00",
+		594: "[$TZS]\\ #,##0.00",
+		595: "[$UAH]\\ #,##0.00",
+		596: "[$UGX]\\ #,##0.00",
+		597: "[$USD]\\ #,##0.00",
+		598: "[$USN]\\ #,##0.00",
+		599: "[$USS]\\ #,##0.00",
+		600: "[$UYI]\\ #,##0.00",
+		601: "[$UYU]\\ #,##0.00",
+		602: "[$UZS]\\ #,##0.00",
+		603: "[$VEB]\\ #,##0.00",
+		604: "[$VEF]\\ #,##0.00",
+		605: "[$VND]\\ #,##0.00",
+		606: "[$VUV]\\ #,##0.00",
+		607: "[$WST]\\ #,##0.00",
+		608: "[$XAF]\\ #,##0.00",
+		609: "[$XAG]\\ #,##0.00",
+		610: "[$XAU]\\ #,##0.00",
+		611: "[$XB5]\\ #,##0.00",
+		612: "[$XBA]\\ #,##0.00",
+		613: "[$XBB]\\ #,##0.00",
+		614: "[$XBC]\\ #,##0.00",
+		615: "[$XBD]\\ #,##0.00",
+		616: "[$XCD]\\ #,##0.00",
+		617: "[$XDR]\\ #,##0.00",
+		618: "[$XFO]\\ #,##0.00",
+		619: "[$XFU]\\ #,##0.00",
+		620: "[$XOF]\\ #,##0.00",
+		621: "[$XPD]\\ #,##0.00",
+		622: "[$XPF]\\ #,##0.00",
+		623: "[$XPT]\\ #,##0.00",
+		624: "[$XTS]\\ #,##0.00",
+		625: "[$XXX]\\ #,##0.00",
+		626: "[$YER]\\ #,##0.00",
+		627: "[$YUM]\\ #,##0.00",
+		628: "[$ZAR]\\ #,##0.00",
+		629: "[$ZMK]\\ #,##0.00",
+		630: "[$ZMW]\\ #,##0.00",
+		631: "[$ZWD]\\ #,##0.00",
+		632: "[$ZWL]\\ #,##0.00",
+		633: "[$ZWN]\\ #,##0.00",
+		634: "[$ZWR]\\ #,##0.00",
+	}
 	// supportedTokenTypes list the supported number format token types currently.
 	supportedTokenTypes = []string{
+		nfp.TokenSubTypeCurrencyString,
 		nfp.TokenSubTypeLanguageInfo,
 		nfp.TokenTypeColor,
 		nfp.TokenTypeCurrencyLanguage,
 		nfp.TokenTypeDateTimes,
+		nfp.TokenTypeDecimalPoint,
 		nfp.TokenTypeElapsedDateTimes,
+		nfp.TokenTypeExponential,
 		nfp.TokenTypeGeneral,
+		nfp.TokenTypeHashPlaceHolder,
 		nfp.TokenTypeLiteral,
+		nfp.TokenTypePercent,
+		nfp.TokenTypeSwitchArgument,
 		nfp.TokenTypeTextPlaceHolder,
+		nfp.TokenTypeThousandsSeparator,
 		nfp.TokenTypeZeroPlaceHolder,
+	}
+	// supportedNumberTokenTypes list the supported number token types.
+	supportedNumberTokenTypes = []string{
+		nfp.TokenTypeExponential,
+		nfp.TokenTypeHashPlaceHolder,
+		nfp.TokenTypePercent,
+		nfp.TokenTypeZeroPlaceHolder,
+	}
+	// supportedDateTimeTokenTypes list the supported date and time token types.
+	supportedDateTimeTokenTypes = []string{
+		nfp.TokenTypeDateTimes,
+		nfp.TokenTypeElapsedDateTimes,
 	}
 	// supportedLanguageInfo directly maps the supported language ID and tags.
 	supportedLanguageInfo = map[string]languageInfo{
@@ -331,11 +989,115 @@ var (
 	apFmtYi = "\ua3b8\ua111/\ua06f\ua2d2"
 	// apFmtWelsh defined the AM/PM name in the Welsh.
 	apFmtWelsh = "yb/yh"
+	// switchArgumentFunc defined the switch argument printer function
+	switchArgumentFunc = map[string]func(s string) string{
+		"[DBNum1]": func(s string) string {
+			r := strings.NewReplacer(
+				"0", "\u25cb", "1", "\u4e00", "2", "\u4e8c", "3", "\u4e09", "4", "\u56db",
+				"5", "\u4e94", "6", "\u516d", "7", "\u4e03", "8", "\u516b", "9", "\u4e5d",
+			)
+			return r.Replace(s)
+		},
+		"[DBNum2]": func(s string) string {
+			r := strings.NewReplacer(
+				"0", "\u96f6", "1", "\u58f9", "2", "\u8d30", "3", "\u53c1", "4", "\u8086",
+				"5", "\u4f0d", "6", "\u9646", "7", "\u67d2", "8", "\u634c", "9", "\u7396",
+			)
+			return r.Replace(s)
+		},
+		"[DBNum3]": func(s string) string {
+			r := strings.NewReplacer(
+				"0", "\uff10", "1", "\uff11", "2", "\uff12", "3", "\uff13", "4", "\uff14",
+				"5", "\uff15", "6", "\uff16", "7", "\uff17", "8", "\uff18", "9", "\uff19",
+			)
+			return r.Replace(s)
+		},
+	}
 )
+
+// applyBuiltInNumFmt provides a function to returns a value after formatted
+// with built-in number format code, or specified sort date format code.
+func (f *File) applyBuiltInNumFmt(c *xlsxC, fmtCode string, numFmtID int, date1904 bool, cellType CellType) string {
+	if f.options != nil && f.options.ShortDatePattern != "" {
+		if numFmtID == 14 {
+			fmtCode = f.options.ShortDatePattern
+		}
+		if numFmtID == 22 {
+			fmtCode = fmt.Sprintf("%s hh:mm", f.options.ShortDatePattern)
+		}
+	}
+	return format(c.V, fmtCode, date1904, cellType, f.options)
+}
+
+// langNumFmtFuncEnUS returns number format code by given date and time pattern
+// for country code en-us.
+func (f *File) langNumFmtFuncEnUS(numFmtID int) string {
+	shortDatePattern, longTimePattern := "M/d/yy", "h:mm:ss"
+	if f.options.ShortDatePattern != "" {
+		shortDatePattern = f.options.ShortDatePattern
+	}
+	if f.options.LongTimePattern != "" {
+		longTimePattern = f.options.LongTimePattern
+	}
+	if 32 <= numFmtID && numFmtID <= 35 {
+		return longTimePattern
+	}
+	if (27 <= numFmtID && numFmtID <= 31) || (50 <= numFmtID && numFmtID <= 58) {
+		return shortDatePattern
+	}
+	return ""
+}
+
+// checkDateTimePattern check and validate date and time options field value.
+func (f *File) checkDateTimePattern() error {
+	for _, pattern := range []string{f.options.LongDatePattern, f.options.LongTimePattern, f.options.ShortDatePattern} {
+		p := nfp.NumberFormatParser()
+		for _, section := range p.Parse(pattern) {
+			for _, token := range section.Items {
+				if inStrSlice(supportedTokenTypes, token.TType, false) == -1 || inStrSlice(supportedNumberTokenTypes, token.TType, false) != -1 {
+					return ErrUnsupportedNumberFormat
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// langNumFmtFuncZhCN returns number format code by given date and time pattern
+// for country code zh-cn.
+func (f *File) langNumFmtFuncZhCN(numFmtID int) string {
+	if numFmtID == 30 && f.options.ShortDatePattern != "" {
+		return f.options.ShortDatePattern
+	}
+	if (32 <= numFmtID && numFmtID <= 33) && f.options.LongTimePattern != "" {
+		return f.options.LongTimePattern
+	}
+	return langNumFmt["zh-cn"][numFmtID]
+}
+
+// getBuiltInNumFmtCode convert number format index to number format code with
+// specified locale and language.
+func (f *File) getBuiltInNumFmtCode(numFmtID int) (string, bool) {
+	if fmtCode, ok := builtInNumFmt[numFmtID]; ok {
+		return fmtCode, true
+	}
+	if (27 <= numFmtID && numFmtID <= 36) || (50 <= numFmtID && numFmtID <= 81) {
+		if f.options.CultureInfo == CultureNameEnUS {
+			return f.langNumFmtFuncEnUS(numFmtID), true
+		}
+		if f.options.CultureInfo == CultureNameZhCN {
+			return f.langNumFmtFuncZhCN(numFmtID), true
+		}
+	}
+	return "", false
+}
 
 // prepareNumberic split the number into two before and after parts by a
 // decimal point.
 func (nf *numberFormat) prepareNumberic(value string) {
+	if nf.cellType != CellTypeNumber && nf.cellType != CellTypeDate {
+		return
+	}
 	if nf.isNumeric, _, _ = isNumeric(value); !nf.isNumeric {
 		return
 	}
@@ -344,9 +1106,9 @@ func (nf *numberFormat) prepareNumberic(value string) {
 // format provides a function to return a string parse by number format
 // expression. If the given number format is not supported, this will return
 // the original cell value.
-func format(value, numFmt string, date1904 bool) string {
+func format(value, numFmt string, date1904 bool, cellType CellType, opts *Options) string {
 	p := nfp.NumberFormatParser()
-	nf := numberFormat{section: p.Parse(numFmt), value: value, date1904: date1904}
+	nf := numberFormat{opts: opts, section: p.Parse(numFmt), value: value, date1904: date1904, cellType: cellType}
 	nf.number, nf.valueSectionType = nf.getValueSectionType(value)
 	nf.prepareNumberic(value)
 	for i, section := range nf.section {
@@ -369,20 +1131,205 @@ func format(value, numFmt string, date1904 bool) string {
 	return value
 }
 
-// positiveHandler will be handling positive selection for a number format
-// expression.
-func (nf *numberFormat) positiveHandler() (result string) {
+// getNumberPartLen returns the length of integer and fraction parts for the
+// numeric.
+func getNumberPartLen(n float64) (int, int) {
+	parts := strings.Split(strconv.FormatFloat(math.Abs(n), 'f', -1, 64), ".")
+	if len(parts) == 2 {
+		return len(parts[0]), len(parts[1])
+	}
+	return len(parts[0]), 0
+}
+
+// getNumberFmtConf generate the number format padding and placeholder
+// configurations.
+func (nf *numberFormat) getNumberFmtConf() {
+	for _, token := range nf.section[nf.sectionIdx].Items {
+		if token.TType == nfp.TokenTypeHashPlaceHolder {
+			if nf.usePointer {
+				nf.fracHolder += len(token.TValue)
+			} else {
+				nf.intHolder += len(token.TValue)
+			}
+		}
+		if token.TType == nfp.TokenTypeExponential {
+			nf.useScientificNotation = true
+		}
+		if token.TType == nfp.TokenTypeThousandsSeparator {
+			nf.useCommaSep = true
+		}
+		if token.TType == nfp.TokenTypePercent {
+			nf.percent += len(token.TValue)
+		}
+		if token.TType == nfp.TokenTypeDecimalPoint {
+			nf.usePointer = true
+		}
+		if token.TType == nfp.TokenTypeSwitchArgument {
+			nf.switchArgument = token.TValue
+		}
+		if token.TType == nfp.TokenTypeZeroPlaceHolder {
+			if nf.usePointer {
+				if nf.useScientificNotation {
+					nf.expBaseLen += len(token.TValue)
+					continue
+				}
+				nf.fracPadding += len(token.TValue)
+				continue
+			}
+			nf.intPadding += len(token.TValue)
+		}
+	}
+}
+
+// printNumberLiteral apply literal tokens for the pre-formatted text.
+func (nf *numberFormat) printNumberLiteral(text string) string {
+	var result string
+	var useLiteral, useZeroPlaceHolder bool
+	if nf.usePositive {
+		result += "-"
+	}
+	for _, token := range nf.section[nf.sectionIdx].Items {
+		if token.TType == nfp.TokenTypeCurrencyLanguage {
+			if changeNumFmtCode, err := nf.currencyLanguageHandler(token); err != nil || changeNumFmtCode {
+				return nf.value
+			}
+			result += nf.currencyString
+		}
+		if token.TType == nfp.TokenTypeLiteral {
+			if useZeroPlaceHolder {
+				useLiteral = true
+			}
+			result += token.TValue
+		}
+		if token.TType == nfp.TokenTypeZeroPlaceHolder {
+			if useLiteral && useZeroPlaceHolder {
+				return nf.value
+			}
+			if !useZeroPlaceHolder {
+				useZeroPlaceHolder = true
+				result += text
+			}
+		}
+	}
+	return nf.printSwitchArgument(result)
+}
+
+// printCommaSep format number with thousands separator.
+func printCommaSep(text string) string {
+	var (
+		target strings.Builder
+		subStr = strings.Split(text, ".")
+		length = len(subStr[0])
+	)
+	for i := 0; i < length; i++ {
+		if i > 0 && (length-i)%3 == 0 {
+			target.WriteString(",")
+		}
+		target.WriteByte(text[i])
+	}
+	if len(subStr) == 2 {
+		target.WriteString(".")
+		target.WriteString(subStr[1])
+	}
+	return target.String()
+}
+
+// printSwitchArgument format number with switch argument.
+func (nf *numberFormat) printSwitchArgument(text string) string {
+	if nf.switchArgument == "" {
+		return text
+	}
+	if fn, ok := switchArgumentFunc[nf.switchArgument]; ok {
+		return fn(text)
+	}
+	return nf.value
+}
+
+// printBigNumber format number which precision great than 15 with fraction
+// zero padding and percentage symbol.
+func (nf *numberFormat) printBigNumber(decimal float64, fracLen int) string {
+	var exp float64
+	if nf.percent > 0 {
+		exp = 1
+	}
+	result := strings.TrimLeft(strconv.FormatFloat(decimal*math.Pow(100, exp), 'f', -1, 64), "-")
+	if nf.useCommaSep {
+		result = printCommaSep(result)
+	}
+	if fracLen > 0 {
+		if parts := strings.Split(result, "."); len(parts) == 2 {
+			fracPartLen := len(parts[1])
+			if fracPartLen < fracLen {
+				result = fmt.Sprintf("%s%s", result, strings.Repeat("0", fracLen-fracPartLen))
+			}
+			if fracPartLen > fracLen {
+				result = fmt.Sprintf("%s.%s", parts[0], parts[1][:fracLen])
+			}
+		} else {
+			result = fmt.Sprintf("%s.%s", result, strings.Repeat("0", fracLen))
+		}
+	}
+	if nf.percent > 0 {
+		return fmt.Sprintf("%s%%", result)
+	}
+	return result
+}
+
+// numberHandler handling number format expression for positive and negative
+// numeric.
+func (nf *numberFormat) numberHandler() string {
+	var (
+		num               = nf.number
+		intPart, fracPart = getNumberPartLen(nf.number)
+		intLen, fracLen   int
+		result            string
+	)
+	nf.getNumberFmtConf()
+	if intLen = intPart; nf.intPadding > intPart {
+		intLen = nf.intPadding
+	}
+	if fracLen = fracPart; fracPart > nf.fracHolder+nf.fracPadding {
+		fracLen = nf.fracHolder + nf.fracPadding
+	}
+	if nf.fracPadding > fracPart {
+		fracLen = nf.fracPadding
+	}
+	if isNum, precision, decimal := isNumeric(nf.value); isNum {
+		if precision > 15 && intLen+fracLen > 15 {
+			return nf.printNumberLiteral(nf.printBigNumber(decimal, fracLen))
+		}
+	}
+	paddingLen := intLen + fracLen
+	if fracLen > 0 {
+		paddingLen++
+	}
+	flag := "f"
+	if nf.useScientificNotation {
+		if nf.expBaseLen != 2 {
+			return nf.value
+		}
+		flag = "E"
+	}
+	fmtCode := fmt.Sprintf("%%0%d.%d%s%s", paddingLen, fracLen, flag, strings.Repeat("%%", nf.percent))
+	if nf.percent > 0 {
+		num *= math.Pow(100, float64(nf.percent))
+	}
+	if result = fmt.Sprintf(fmtCode, math.Abs(num)); nf.useCommaSep {
+		result = printCommaSep(result)
+	}
+	return nf.printNumberLiteral(result)
+}
+
+// dateTimeHandler handling data and time number format expression for a
+// positive numeric.
+func (nf *numberFormat) dateTimeHandler() string {
 	nf.t, nf.hours, nf.seconds = timeFromExcelTime(nf.number, nf.date1904), false, false
 	for i, token := range nf.section[nf.sectionIdx].Items {
-		if inStrSlice(supportedTokenTypes, token.TType, true) == -1 || token.TType == nfp.TokenTypeGeneral {
-			result = nf.value
-			return
-		}
 		if token.TType == nfp.TokenTypeCurrencyLanguage {
-			if err := nf.currencyLanguageHandler(i, token); err != nil {
-				result = nf.value
-				return
+			if changeNumFmtCode, err := nf.currencyLanguageHandler(token); err != nil || changeNumFmtCode {
+				return nf.value
 			}
+			nf.result += nf.currencyString
 		}
 		if token.TType == nfp.TokenTypeDateTimes {
 			nf.dateTimesHandler(i, token)
@@ -394,40 +1341,92 @@ func (nf *numberFormat) positiveHandler() (result string) {
 			nf.result += token.TValue
 			continue
 		}
-		if token.TType == nfp.TokenTypeZeroPlaceHolder && token.TValue == strings.Repeat("0", len(token.TValue)) {
-			if isNum, precision, decimal := isNumeric(nf.value); isNum {
-				if nf.number < 1 {
-					nf.result += "0"
-					continue
-				}
-				if precision > 15 {
-					nf.result += strconv.FormatFloat(decimal, 'f', -1, 64)
-				} else {
-					nf.result += fmt.Sprintf("%.f", nf.number)
-				}
-				continue
+		if token.TType == nfp.TokenTypeDecimalPoint {
+			nf.result += "."
+		}
+		if token.TType == nfp.TokenTypeSwitchArgument {
+			nf.switchArgument = token.TValue
+		}
+		if token.TType == nfp.TokenTypeZeroPlaceHolder {
+			zeroHolderLen := len(token.TValue)
+			if zeroHolderLen > 3 {
+				zeroHolderLen = 3
 			}
+			nf.result += fmt.Sprintf("%03d", nf.t.Nanosecond()/1e6)[:zeroHolderLen]
 		}
 	}
-	result = nf.result
-	return
+	return nf.printSwitchArgument(nf.result)
 }
 
-// currencyLanguageHandler will be handling currency and language types tokens for a number
-// format expression.
-func (nf *numberFormat) currencyLanguageHandler(i int, token nfp.Token) (err error) {
+// positiveHandler will be handling positive selection for a number format
+// expression.
+func (nf *numberFormat) positiveHandler() string {
+	var fmtNum bool
+	for _, token := range nf.section[nf.sectionIdx].Items {
+		if inStrSlice(supportedTokenTypes, token.TType, true) == -1 || token.TType == nfp.TokenTypeGeneral {
+			return nf.value
+		}
+		if inStrSlice(supportedNumberTokenTypes, token.TType, true) != -1 {
+			fmtNum = true
+		}
+		if inStrSlice(supportedDateTimeTokenTypes, token.TType, true) != -1 {
+			if fmtNum || nf.number < 0 {
+				return nf.value
+			}
+			var useDateTimeTokens bool
+			for _, token := range nf.section[nf.sectionIdx].Items {
+				if inStrSlice(supportedDateTimeTokenTypes, token.TType, false) != -1 {
+					if useDateTimeTokens && nf.useMillisecond {
+						return nf.value
+					}
+					useDateTimeTokens = true
+				}
+				if inStrSlice(supportedNumberTokenTypes, token.TType, false) != -1 {
+					if token.TType == nfp.TokenTypeZeroPlaceHolder {
+						nf.useMillisecond = true
+						continue
+					}
+					return nf.value
+				}
+			}
+			return nf.dateTimeHandler()
+		}
+	}
+	return nf.numberHandler()
+}
+
+// currencyLanguageHandler will be handling currency and language types tokens
+// for a number format expression.
+func (nf *numberFormat) currencyLanguageHandler(token nfp.Token) (bool, error) {
 	for _, part := range token.Parts {
 		if inStrSlice(supportedTokenTypes, part.Token.TType, true) == -1 {
-			err = ErrUnsupportedNumberFormat
-			return
+			return false, ErrUnsupportedNumberFormat
 		}
-		if _, ok := supportedLanguageInfo[strings.ToUpper(part.Token.TValue)]; !ok {
-			err = ErrUnsupportedNumberFormat
-			return
+		if part.Token.TType == nfp.TokenSubTypeLanguageInfo {
+			if strings.EqualFold(part.Token.TValue, "F800") { // [$-x-sysdate]
+				if nf.opts != nil && nf.opts.LongDatePattern != "" {
+					nf.value = format(nf.value, nf.opts.LongDatePattern, nf.date1904, nf.cellType, nf.opts)
+					return true, nil
+				}
+				part.Token.TValue = "409"
+			}
+			if strings.EqualFold(part.Token.TValue, "F400") { // [$-x-systime]
+				if nf.opts != nil && nf.opts.LongTimePattern != "" {
+					nf.value = format(nf.value, nf.opts.LongTimePattern, nf.date1904, nf.cellType, nf.opts)
+					return true, nil
+				}
+				part.Token.TValue = "409"
+			}
+			if _, ok := supportedLanguageInfo[strings.ToUpper(part.Token.TValue)]; !ok {
+				return false, ErrUnsupportedNumberFormat
+			}
+			nf.localCode = strings.ToUpper(part.Token.TValue)
 		}
-		nf.localCode = strings.ToUpper(part.Token.TValue)
+		if part.Token.TType == nfp.TokenSubTypeCurrencyString {
+			nf.currencyString = part.Token.TValue
+		}
 	}
-	return
+	return false, nil
 }
 
 // localAmPm return AM/PM name by supported language ID.
@@ -497,7 +1496,7 @@ func localMonthsNameFrench(t time.Time, abbr int) string {
 // localMonthsNameIrish returns the Irish name of the month.
 func localMonthsNameIrish(t time.Time, abbr int) string {
 	if abbr == 3 {
-		return monthNamesIrishAbbr[int(t.Month()-1)]
+		return monthNamesIrishAbbr[(t.Month() - 1)]
 	}
 	if abbr == 4 {
 		return monthNamesIrish[int(t.Month())-1]
@@ -530,7 +1529,7 @@ func localMonthsNameGerman(t time.Time, abbr int) string {
 // localMonthsNameChinese1 returns the Chinese name of the month.
 func localMonthsNameChinese1(t time.Time, abbr int) string {
 	if abbr == 3 {
-		return monthNamesChineseAbbrPlus[int(t.Month())]
+		return monthNamesChineseAbbrPlus[t.Month()]
 	}
 	if abbr == 4 {
 		return monthNamesChinesePlus[int(t.Month())-1]
@@ -549,7 +1548,7 @@ func localMonthsNameChinese2(t time.Time, abbr int) string {
 // localMonthsNameChinese3 returns the Chinese name of the month.
 func localMonthsNameChinese3(t time.Time, abbr int) string {
 	if abbr == 3 || abbr == 4 {
-		return monthNamesChineseAbbrPlus[int(t.Month())]
+		return monthNamesChineseAbbrPlus[t.Month()]
 	}
 	return strconv.Itoa(int(t.Month()))
 }
@@ -557,17 +1556,18 @@ func localMonthsNameChinese3(t time.Time, abbr int) string {
 // localMonthsNameKorean returns the Korean name of the month.
 func localMonthsNameKorean(t time.Time, abbr int) string {
 	if abbr == 3 || abbr == 4 {
-		return monthNamesKoreanAbbrPlus[int(t.Month())]
+		return monthNamesKoreanAbbrPlus[t.Month()]
 	}
 	return strconv.Itoa(int(t.Month()))
 }
 
-// localMonthsNameTraditionalMongolian returns the Traditional Mongolian name of the month.
+// localMonthsNameTraditionalMongolian returns the Traditional Mongolian name of
+// the month.
 func localMonthsNameTraditionalMongolian(t time.Time, abbr int) string {
 	if abbr == 5 {
 		return "M"
 	}
-	return monthNamesTradMongolian[int(t.Month()-1)]
+	return monthNamesTradMongolian[t.Month()-1]
 }
 
 // localMonthsNameRussian returns the Russian name of the month.
@@ -647,12 +1647,12 @@ func localMonthsNameWelsh(t time.Time, abbr int) string {
 // localMonthsNameVietnamese returns the Vietnamese name of the month.
 func localMonthsNameVietnamese(t time.Time, abbr int) string {
 	if abbr == 3 {
-		return monthNamesVietnameseAbbr3[int(t.Month()-1)]
+		return monthNamesVietnameseAbbr3[t.Month()-1]
 	}
 	if abbr == 5 {
-		return monthNamesVietnameseAbbr5[int(t.Month()-1)]
+		return monthNamesVietnameseAbbr5[t.Month()-1]
 	}
-	return monthNamesVietnamese[int(t.Month()-1)]
+	return monthNamesVietnamese[t.Month()-1]
 }
 
 // localMonthsNameWolof returns the Wolof name of the month.
@@ -680,7 +1680,7 @@ func localMonthsNameXhosa(t time.Time, abbr int) string {
 // localMonthsNameYi returns the Yi name of the month.
 func localMonthsNameYi(t time.Time, abbr int) string {
 	if abbr == 3 || abbr == 4 {
-		return monthNamesYiSuffix[int(t.Month()-1)]
+		return monthNamesYiSuffix[t.Month()-1]
 	}
 	return string([]rune(monthNamesYi[int(t.Month())-1])[:1])
 }
@@ -688,7 +1688,7 @@ func localMonthsNameYi(t time.Time, abbr int) string {
 // localMonthsNameZulu returns the Zulu name of the month.
 func localMonthsNameZulu(t time.Time, abbr int) string {
 	if abbr == 3 {
-		return monthNamesZuluAbbr[int(t.Month()-1)]
+		return monthNamesZuluAbbr[t.Month()-1]
 	}
 	if abbr == 4 {
 		return monthNamesZulu[int(t.Month())-1]
@@ -742,8 +1742,8 @@ func (nf *numberFormat) dateTimesHandler(i int, token nfp.Token) {
 			return
 		}
 	}
-	nf.yearsHandler(i, token)
-	nf.daysHandler(i, token)
+	nf.yearsHandler(token)
+	nf.daysHandler(token)
 	nf.hoursHandler(i, token)
 	nf.minutesHandler(token)
 	nf.secondsHandler(token)
@@ -751,7 +1751,7 @@ func (nf *numberFormat) dateTimesHandler(i int, token nfp.Token) {
 
 // yearsHandler will be handling years in the date and times types tokens for a
 // number format expression.
-func (nf *numberFormat) yearsHandler(i int, token nfp.Token) {
+func (nf *numberFormat) yearsHandler(token nfp.Token) {
 	years := strings.Contains(strings.ToUpper(token.TValue), "Y")
 	if years && len(token.TValue) <= 2 {
 		nf.result += strconv.Itoa(nf.t.Year())[2:]
@@ -765,7 +1765,7 @@ func (nf *numberFormat) yearsHandler(i int, token nfp.Token) {
 
 // daysHandler will be handling days in the date and times types tokens for a
 // number format expression.
-func (nf *numberFormat) daysHandler(i int, token nfp.Token) {
+func (nf *numberFormat) daysHandler(token nfp.Token) {
 	if strings.Contains(strings.ToUpper(token.TValue), "D") {
 		switch len(token.TValue) {
 		case 1:
@@ -800,8 +1800,13 @@ func (nf *numberFormat) hoursHandler(i int, token nfp.Token) {
 				h -= 12
 			}
 		}
-		if nf.ap != "" && nf.hoursNext(i) == -1 && h > 12 {
-			h -= 12
+		if nf.ap != "" {
+			if nf.hoursNext(i) == -1 && h > 12 {
+				h -= 12
+			}
+			if h == 0 {
+				h = 12
+			}
 		}
 		switch len(token.TValue) {
 		case 1:
@@ -833,17 +1838,17 @@ func (nf *numberFormat) minutesHandler(token nfp.Token) {
 // secondsHandler will be handling seconds in the date and times types tokens
 // for a number format expression.
 func (nf *numberFormat) secondsHandler(token nfp.Token) {
-	nf.seconds = strings.Contains(strings.ToUpper(token.TValue), "S")
-	if nf.seconds {
-		switch len(token.TValue) {
-		case 1:
-			nf.result += strconv.Itoa(nf.t.Second())
-			return
-		default:
-			nf.result += fmt.Sprintf("%02d", nf.t.Second())
-			return
-		}
+	if nf.seconds = strings.Contains(strings.ToUpper(token.TValue), "S"); !nf.seconds {
+		return
 	}
+	if !nf.useMillisecond {
+		nf.t = nf.t.Add(time.Duration(math.Round(float64(nf.t.Nanosecond())/1e9)) * time.Second)
+	}
+	if len(token.TValue) == 1 {
+		nf.result += strconv.Itoa(nf.t.Second())
+		return
+	}
+	nf.result += fmt.Sprintf("%02d", nf.t.Second())
 }
 
 // elapsedDateTimesHandler will be handling elapsed date and times types tokens
@@ -910,30 +1915,13 @@ func (nf *numberFormat) secondsNext(i int) bool {
 func (nf *numberFormat) negativeHandler() (result string) {
 	for _, token := range nf.section[nf.sectionIdx].Items {
 		if inStrSlice(supportedTokenTypes, token.TType, true) == -1 || token.TType == nfp.TokenTypeGeneral {
-			result = nf.value
-			return
+			return nf.value
 		}
-		if token.TType == nfp.TokenTypeLiteral {
-			nf.result += token.TValue
-			continue
-		}
-		if token.TType == nfp.TokenTypeZeroPlaceHolder && token.TValue == strings.Repeat("0", len(token.TValue)) {
-			if isNum, precision, decimal := isNumeric(nf.value); isNum {
-				if math.Abs(nf.number) < 1 {
-					nf.result += "0"
-					continue
-				}
-				if precision > 15 {
-					nf.result += strings.TrimLeft(strconv.FormatFloat(decimal, 'f', -1, 64), "-")
-				} else {
-					nf.result += fmt.Sprintf("%.f", math.Abs(nf.number))
-				}
-				continue
-			}
+		if inStrSlice(supportedDateTimeTokenTypes, token.TType, true) != -1 {
+			return nf.value
 		}
 	}
-	result = nf.result
-	return
+	return nf.numberHandler()
 }
 
 // zeroHandler will be handling zero selection for a number format expression.
@@ -947,7 +1935,7 @@ func (nf *numberFormat) textHandler() (result string) {
 		if token.TType == nfp.TokenTypeLiteral {
 			result += token.TValue
 		}
-		if token.TType == nfp.TokenTypeTextPlaceHolder {
+		if token.TType == nfp.TokenTypeTextPlaceHolder || token.TType == nfp.TokenTypeZeroPlaceHolder {
 			result += nf.value
 		}
 	}
@@ -957,6 +1945,9 @@ func (nf *numberFormat) textHandler() (result string) {
 // getValueSectionType returns its applicable number format expression section
 // based on the given value.
 func (nf *numberFormat) getValueSectionType(value string) (float64, string) {
+	if nf.cellType != CellTypeNumber && nf.cellType != CellTypeDate {
+		return 0, nfp.TokenSectionText
+	}
 	isNum, _, _ := isNumeric(value)
 	if !isNum {
 		return 0, nfp.TokenSectionText
@@ -966,6 +1957,16 @@ func (nf *numberFormat) getValueSectionType(value string) (float64, string) {
 		return number, nfp.TokenSectionPositive
 	}
 	if number < 0 {
+		var hasNeg bool
+		for _, sec := range nf.section {
+			if sec.Type == nfp.TokenSectionNegative {
+				hasNeg = true
+			}
+		}
+		if !hasNeg {
+			nf.usePositive = true
+			return number, nfp.TokenSectionPositive
+		}
 		return number, nfp.TokenSectionNegative
 	}
 	return number, nfp.TokenSectionZero

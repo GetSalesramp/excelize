@@ -62,7 +62,7 @@ func parseGraphicOptions(opts *GraphicOptions) *GraphicOptions {
 //	    _ "image/jpeg"
 //	    _ "image/png"
 //
-//	    "github.com/Aymeric-Henry/excelize"
+//	    "github.com/xuri/excelize/v2"
 //	)
 //
 //	func main() {
@@ -97,7 +97,7 @@ func parseGraphicOptions(opts *GraphicOptions) *GraphicOptions {
 //	            LockAspectRatio: false,
 //	            OffsetX:         15,
 //	            OffsetY:         10,
-//	            Hyperlink:       "https://github.com/Aymeric-Henry/excelize",
+//	            Hyperlink:       "https://github.com/xuri/excelize",
 //	            HyperlinkType:   "External",
 //	            Positioning:     "oneCell",
 //	        },
@@ -172,7 +172,7 @@ func (f *File) AddPicture(sheet, cell, name string, opts *GraphicOptions) error 
 //	    _ "image/jpeg"
 //	    "os"
 //
-//	    "github.com/Aymeric-Henry/excelize"
+//	    "github.com/xuri/excelize/v2"
 //	)
 //
 //	func main() {
@@ -212,11 +212,14 @@ func (f *File) AddPictureFromBytes(sheet, cell string, pic *Picture) error {
 		return err
 	}
 	// Read sheet data.
+	f.mu.Lock()
 	ws, err := f.workSheetReader(sheet)
 	if err != nil {
+		f.mu.Unlock()
 		return err
 	}
-	ws.Lock()
+	f.mu.Unlock()
+	ws.mu.Lock()
 	// Add first picture for given sheet, create xl/drawings/ and xl/drawings/_rels/ folder.
 	drawingID := f.countDrawings() + 1
 	drawingXML := "xl/drawings/drawing" + strconv.Itoa(drawingID) + ".xml"
@@ -231,7 +234,7 @@ func (f *File) AddPictureFromBytes(sheet, cell string, pic *Picture) error {
 		}
 		drawingHyperlinkRID = f.addRels(drawingRels, SourceRelationshipHyperLink, options.Hyperlink, hyperlinkType)
 	}
-	ws.Unlock()
+	ws.mu.Unlock()
 	err = f.addDrawingPicture(sheet, drawingXML, cell, ext, drawingRID, drawingHyperlinkRID, img, options)
 	if err != nil {
 		return err
@@ -256,8 +259,8 @@ func (f *File) deleteSheetRelationships(sheet, rID string) {
 	if sheetRels == nil {
 		sheetRels = &xlsxRelationships{}
 	}
-	sheetRels.Lock()
-	defer sheetRels.Unlock()
+	sheetRels.mu.Lock()
+	defer sheetRels.mu.Unlock()
 	for k, v := range sheetRels.Relationships {
 		if v.ID == rID {
 			sheetRels.Relationships = append(sheetRels.Relationships[:k], sheetRels.Relationships[k+1:]...)
@@ -329,16 +332,13 @@ func (f *File) addDrawingPicture(sheet, drawingXML, cell, ext string, rID, hyper
 	}
 	width, height := img.Width, img.Height
 	if opts.AutoFit {
-		width, height, col, row, err = f.drawingResize(sheet, cell, float64(width), float64(height), opts)
-		if err != nil {
+		if width, height, col, row, err = f.drawingResize(sheet, cell, float64(width), float64(height), opts); err != nil {
 			return err
 		}
 	} else {
 		width = int(float64(width) * opts.ScaleX)
 		height = int(float64(height) * opts.ScaleY)
 	}
-	col--
-	row--
 	colStart, rowStart, colEnd, rowEnd, x2, y2 := f.positionObjectPixels(sheet, col, row, opts.OffsetX, opts.OffsetY, width, height)
 	content, cNvPrID, err := f.drawingParser(drawingXML)
 	if err != nil {
@@ -391,8 +391,8 @@ func (f *File) addDrawingPicture(sheet, drawingXML, cell, ext string, rID, hyper
 		FLocksWithSheet:  *opts.Locked,
 		FPrintsWithSheet: *opts.PrintObject,
 	}
-	content.Lock()
-	defer content.Unlock()
+	content.mu.Lock()
+	defer content.mu.Unlock()
 	content.TwoCellAnchor = append(content.TwoCellAnchor, &twoCellAnchor)
 	f.Drawings.Store(drawingXML, content)
 	return err
@@ -447,8 +447,8 @@ func (f *File) setContentTypePartImageExtensions() error {
 	if err != nil {
 		return err
 	}
-	content.Lock()
-	defer content.Unlock()
+	content.mu.Lock()
+	defer content.mu.Unlock()
 	for _, file := range content.Defaults {
 		delete(imageTypes, file.Extension)
 	}
@@ -469,8 +469,8 @@ func (f *File) setContentTypePartVMLExtensions() error {
 	if err != nil {
 		return err
 	}
-	content.Lock()
-	defer content.Unlock()
+	content.mu.Lock()
+	defer content.mu.Unlock()
 	for _, v := range content.Defaults {
 		if v.Extension == "vml" {
 			vml = true
@@ -522,8 +522,8 @@ func (f *File) addContentTypePart(index int, contentType string) error {
 	if err != nil {
 		return err
 	}
-	content.Lock()
-	defer content.Unlock()
+	content.mu.Lock()
+	defer content.mu.Unlock()
 	for _, v := range content.Overrides {
 		if v.PartName == partNames[contentType] {
 			return err
@@ -549,8 +549,8 @@ func (f *File) getSheetRelationshipsTargetByID(sheet, rID string) string {
 	if sheetRels == nil {
 		sheetRels = &xlsxRelationships{}
 	}
-	sheetRels.Lock()
-	defer sheetRels.Unlock()
+	sheetRels.mu.Lock()
+	defer sheetRels.mu.Unlock()
 	for _, v := range sheetRels.Relationships {
 		if v.ID == rID {
 			return v.Target
@@ -591,10 +591,13 @@ func (f *File) GetPictures(sheet, cell string) ([]Picture, error) {
 	}
 	col--
 	row--
+	f.mu.Lock()
 	ws, err := f.workSheetReader(sheet)
 	if err != nil {
+		f.mu.Unlock()
 		return nil, err
 	}
+	f.mu.Unlock()
 	if ws.Drawing == nil {
 		return nil, err
 	}
@@ -666,7 +669,6 @@ func (f *File) getPicture(row, col int, drawingXML, drawingRelationships string)
 						pic.Format.AltText = deTwoCellAnchor.Pic.NvPicPr.CNvPr.Descr
 						pics = append(pics, pic)
 					}
-					return
 				}
 			}
 		}
@@ -683,8 +685,8 @@ func (f *File) getPicturesFromWsDr(row, col int, drawingRelationships string, ws
 		anchor  *xdrCellAnchor
 		drawRel *xlsxRelationship
 	)
-	wsDr.Lock()
-	defer wsDr.Unlock()
+	wsDr.mu.Lock()
+	defer wsDr.mu.Unlock()
 	for _, anchor = range wsDr.TwoCellAnchor {
 		if anchor.From != nil && anchor.Pic != nil {
 			if anchor.From.Col == col && anchor.From.Row == row {
@@ -710,8 +712,8 @@ func (f *File) getPicturesFromWsDr(row, col int, drawingRelationships string, ws
 // relationship ID.
 func (f *File) getDrawingRelationships(rels, rID string) *xlsxRelationship {
 	if drawingRels, _ := f.relsReader(rels); drawingRels != nil {
-		drawingRels.Lock()
-		defer drawingRels.Unlock()
+		drawingRels.mu.Lock()
+		defer drawingRels.mu.Unlock()
 		for _, v := range drawingRels.Relationships {
 			if v.ID == rID {
 				return &v

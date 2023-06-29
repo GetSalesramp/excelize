@@ -11,6 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGetRows(t *testing.T) {
+	f := NewFile()
+	assert.NoError(t, f.SetCellValue("Sheet1", "A1", "A1"))
+	// Test get rows with unsupported charset shared strings table
+	f.SharedStrings = nil
+	f.Pkg.Store(defaultXMLPathSharedStrings, MacintoshCyrillicCharset)
+	_, err := f.GetRows("Sheet1")
+	assert.NoError(t, err)
+}
+
 func TestRows(t *testing.T) {
 	const sheet2 = "Sheet2"
 	f, err := OpenFile(filepath.Join("test", "Book1.xlsx"))
@@ -295,9 +305,9 @@ func TestRemoveRow(t *testing.T) {
 		colCount = 10
 		rowCount = 10
 	)
-	fillCells(f, sheet1, colCount, rowCount)
+	assert.NoError(t, fillCells(f, sheet1, colCount, rowCount))
 
-	assert.NoError(t, f.SetCellHyperLink(sheet1, "A5", "https://github.com/Aymeric-Henry/excelize", "External"))
+	assert.NoError(t, f.SetCellHyperLink(sheet1, "A5", "https://github.com/xuri/excelize", "External"))
 
 	assert.EqualError(t, f.RemoveRow(sheet1, -1), newInvalidRowNumberError(-1).Error())
 
@@ -358,9 +368,9 @@ func TestInsertRows(t *testing.T) {
 		colCount = 10
 		rowCount = 10
 	)
-	fillCells(f, sheet1, colCount, rowCount)
+	assert.NoError(t, fillCells(f, sheet1, colCount, rowCount))
 
-	assert.NoError(t, f.SetCellHyperLink(sheet1, "A5", "https://github.com/Aymeric-Henry/excelize", "External"))
+	assert.NoError(t, f.SetCellHyperLink(sheet1, "A5", "https://github.com/xuri/excelize", "External"))
 
 	assert.NoError(t, f.InsertRows(sheet1, 1, 1))
 	if !assert.Len(t, r.SheetData.Row, rowCount+1) {
@@ -404,6 +414,23 @@ func TestInsertRowsInEmptyFile(t *testing.T) {
 	assert.NoError(t, f.InsertRows(sheet1, 99, 1))
 	assert.Len(t, r.SheetData.Row, 0)
 	assert.NoError(t, f.SaveAs(filepath.Join("test", "TestInsertRowInEmptyFile.xlsx")))
+}
+
+func prepareTestBook2() (*File, error) {
+	f := NewFile()
+	for cell, val := range map[string]string{
+		"A1": "A1 Value",
+		"A2": "A2 Value",
+		"A3": "A3 Value",
+		"B1": "B1 Value",
+		"B2": "B2 Value",
+		"B3": "B3 Value",
+	} {
+		if err := f.SetCellStr("Sheet1", cell, val); err != nil {
+			return f, err
+		}
+	}
+	return f, nil
 }
 
 func TestDuplicateRowFromSingleRow(t *testing.T) {
@@ -502,7 +529,6 @@ func TestDuplicateRowUpdateDuplicatedRows(t *testing.T) {
 func TestDuplicateRowFirstOfMultipleRows(t *testing.T) {
 	const sheet = "Sheet1"
 	outFile := filepath.Join("test", "TestDuplicateRow.%s.xlsx")
-
 	cells := map[string]string{
 		"A1": "A1 Value",
 		"A2": "A2 Value",
@@ -511,18 +537,9 @@ func TestDuplicateRowFirstOfMultipleRows(t *testing.T) {
 		"B2": "B2 Value",
 		"B3": "B3 Value",
 	}
-
-	newFileWithDefaults := func() *File {
-		f := NewFile()
-		for cell, val := range cells {
-			assert.NoError(t, f.SetCellStr(sheet, cell, val))
-		}
-		return f
-	}
-
 	t.Run("FirstOfMultipleRows", func(t *testing.T) {
-		f := newFileWithDefaults()
-
+		f, err := prepareTestBook2()
+		assert.NoError(t, err)
 		assert.NoError(t, f.DuplicateRow(sheet, 1))
 
 		if !assert.NoError(t, f.SaveAs(fmt.Sprintf(outFile, "FirstOfMultipleRows"))) {
@@ -625,18 +642,9 @@ func TestDuplicateRowWithLargeOffsetToMiddleOfData(t *testing.T) {
 		"B2": "B2 Value",
 		"B3": "B3 Value",
 	}
-
-	newFileWithDefaults := func() *File {
-		f := NewFile()
-		for cell, val := range cells {
-			assert.NoError(t, f.SetCellStr(sheet, cell, val))
-		}
-		return f
-	}
-
 	t.Run("WithLargeOffsetToMiddleOfData", func(t *testing.T) {
-		f := newFileWithDefaults()
-
+		f, err := prepareTestBook2()
+		assert.NoError(t, err)
 		assert.NoError(t, f.DuplicateRowTo(sheet, 1, 3))
 
 		if !assert.NoError(t, f.SaveAs(fmt.Sprintf(outFile, "WithLargeOffsetToMiddleOfData"))) {
@@ -661,7 +669,6 @@ func TestDuplicateRowWithLargeOffsetToMiddleOfData(t *testing.T) {
 func TestDuplicateRowWithLargeOffsetToEmptyRows(t *testing.T) {
 	const sheet = "Sheet1"
 	outFile := filepath.Join("test", "TestDuplicateRow.%s.xlsx")
-
 	cells := map[string]string{
 		"A1": "A1 Value",
 		"A2": "A2 Value",
@@ -670,18 +677,9 @@ func TestDuplicateRowWithLargeOffsetToEmptyRows(t *testing.T) {
 		"B2": "B2 Value",
 		"B3": "B3 Value",
 	}
-
-	newFileWithDefaults := func() *File {
-		f := NewFile()
-		for cell, val := range cells {
-			assert.NoError(t, f.SetCellStr(sheet, cell, val))
-		}
-		return f
-	}
-
 	t.Run("WithLargeOffsetToEmptyRows", func(t *testing.T) {
-		f := newFileWithDefaults()
-
+		f, err := prepareTestBook2()
+		assert.NoError(t, err)
 		assert.NoError(t, f.DuplicateRowTo(sheet, 1, 7))
 
 		if !assert.NoError(t, f.SaveAs(fmt.Sprintf(outFile, "WithLargeOffsetToEmptyRows"))) {
@@ -706,7 +704,6 @@ func TestDuplicateRowWithLargeOffsetToEmptyRows(t *testing.T) {
 func TestDuplicateRowInsertBefore(t *testing.T) {
 	const sheet = "Sheet1"
 	outFile := filepath.Join("test", "TestDuplicateRow.%s.xlsx")
-
 	cells := map[string]string{
 		"A1": "A1 Value",
 		"A2": "A2 Value",
@@ -715,18 +712,9 @@ func TestDuplicateRowInsertBefore(t *testing.T) {
 		"B2": "B2 Value",
 		"B3": "B3 Value",
 	}
-
-	newFileWithDefaults := func() *File {
-		f := NewFile()
-		for cell, val := range cells {
-			assert.NoError(t, f.SetCellStr(sheet, cell, val))
-		}
-		return f
-	}
-
 	t.Run("InsertBefore", func(t *testing.T) {
-		f := newFileWithDefaults()
-
+		f, err := prepareTestBook2()
+		assert.NoError(t, err)
 		assert.NoError(t, f.DuplicateRowTo(sheet, 2, 1))
 		assert.NoError(t, f.DuplicateRowTo(sheet, 10, 4))
 
@@ -753,7 +741,6 @@ func TestDuplicateRowInsertBefore(t *testing.T) {
 func TestDuplicateRowInsertBeforeWithLargeOffset(t *testing.T) {
 	const sheet = "Sheet1"
 	outFile := filepath.Join("test", "TestDuplicateRow.%s.xlsx")
-
 	cells := map[string]string{
 		"A1": "A1 Value",
 		"A2": "A2 Value",
@@ -762,18 +749,9 @@ func TestDuplicateRowInsertBeforeWithLargeOffset(t *testing.T) {
 		"B2": "B2 Value",
 		"B3": "B3 Value",
 	}
-
-	newFileWithDefaults := func() *File {
-		f := NewFile()
-		for cell, val := range cells {
-			assert.NoError(t, f.SetCellStr(sheet, cell, val))
-		}
-		return f
-	}
-
 	t.Run("InsertBeforeWithLargeOffset", func(t *testing.T) {
-		f := newFileWithDefaults()
-
+		f, err := prepareTestBook2()
+		assert.NoError(t, err)
 		assert.NoError(t, f.DuplicateRowTo(sheet, 3, 1))
 
 		if !assert.NoError(t, f.SaveAs(fmt.Sprintf(outFile, "InsertBeforeWithLargeOffset"))) {
@@ -799,28 +777,11 @@ func TestDuplicateRowInsertBeforeWithLargeOffset(t *testing.T) {
 func TestDuplicateRowInsertBeforeWithMergeCells(t *testing.T) {
 	const sheet = "Sheet1"
 	outFile := filepath.Join("test", "TestDuplicateRow.%s.xlsx")
-
-	cells := map[string]string{
-		"A1": "A1 Value",
-		"A2": "A2 Value",
-		"A3": "A3 Value",
-		"B1": "B1 Value",
-		"B2": "B2 Value",
-		"B3": "B3 Value",
-	}
-
-	newFileWithDefaults := func() *File {
-		f := NewFile()
-		for cell, val := range cells {
-			assert.NoError(t, f.SetCellStr(sheet, cell, val))
-		}
+	t.Run("InsertBeforeWithLargeOffset", func(t *testing.T) {
+		f, err := prepareTestBook2()
+		assert.NoError(t, err)
 		assert.NoError(t, f.MergeCell(sheet, "B2", "C2"))
 		assert.NoError(t, f.MergeCell(sheet, "C6", "C8"))
-		return f
-	}
-
-	t.Run("InsertBeforeWithLargeOffset", func(t *testing.T) {
-		f := newFileWithDefaults()
 
 		assert.NoError(t, f.DuplicateRowTo(sheet, 2, 1))
 		assert.NoError(t, f.DuplicateRowTo(sheet, 1, 8))
@@ -1104,9 +1065,18 @@ func TestNumberFormats(t *testing.T) {
 		assert.NoError(t, f.SetCellValue("Sheet1", cell, value))
 		result, err := f.GetCellValue("Sheet1", cell)
 		assert.NoError(t, err)
-		assert.Equal(t, expected, result)
+		assert.Equal(t, expected, result, cell)
 	}
 	assert.NoError(t, f.SaveAs(filepath.Join("test", "TestNumberFormats.xlsx")))
+
+	f = NewFile(Options{ShortDatePattern: "yyyy/m/d"})
+	assert.NoError(t, f.SetCellValue("Sheet1", "A1", 43543.503206018519))
+	numFmt14, err := f.NewStyle(&Style{NumFmt: 14})
+	assert.NoError(t, err)
+	assert.NoError(t, f.SetCellStyle("Sheet1", "A1", "A1", numFmt14))
+	result, err := f.GetCellValue("Sheet1", "A1")
+	assert.NoError(t, err)
+	assert.Equal(t, "2019/3/19", result, "A1")
 }
 
 func BenchmarkRows(b *testing.B) {

@@ -366,6 +366,15 @@ func TestColWidth(t *testing.T) {
 	assert.Equal(t, defaultColWidth, width)
 	assert.NoError(t, err)
 
+	ws, ok := f.Sheet.Load("xl/worksheets/sheet1.xml")
+	assert.True(t, ok)
+	ws.(*xlsxWorksheet).SheetFormatPr = &xlsxSheetFormatPr{DefaultColWidth: 10}
+	ws.(*xlsxWorksheet).Cols = nil
+	width, err = f.GetColWidth("Sheet1", "A")
+	assert.NoError(t, err)
+	assert.Equal(t, 10.0, width)
+	assert.Equal(t, 76, f.getColWidth("Sheet1", 1))
+
 	// Test set and get column width with illegal cell reference
 	width, err = f.GetColWidth("Sheet1", "*")
 	assert.Equal(t, defaultColWidth, width)
@@ -407,9 +416,9 @@ func TestInsertCols(t *testing.T) {
 	f := NewFile()
 	sheet1 := f.GetSheetName(0)
 
-	fillCells(f, sheet1, 10, 10)
+	assert.NoError(t, fillCells(f, sheet1, 10, 10))
 
-	assert.NoError(t, f.SetCellHyperLink(sheet1, "A5", "https://github.com/Aymeric-Henry/excelize", "External"))
+	assert.NoError(t, f.SetCellHyperLink(sheet1, "A5", "https://github.com/xuri/excelize", "External"))
 	assert.NoError(t, f.MergeCell(sheet1, "A1", "C3"))
 
 	assert.NoError(t, f.AutoFilter(sheet1, "A2:B2", []AutoFilterOptions{{Column: "B", Expression: "x != blanks"}}))
@@ -430,9 +439,9 @@ func TestRemoveCol(t *testing.T) {
 	f := NewFile()
 	sheet1 := f.GetSheetName(0)
 
-	fillCells(f, sheet1, 10, 15)
+	assert.NoError(t, fillCells(f, sheet1, 10, 15))
 
-	assert.NoError(t, f.SetCellHyperLink(sheet1, "A5", "https://github.com/Aymeric-Henry/excelize", "External"))
+	assert.NoError(t, f.SetCellHyperLink(sheet1, "A5", "https://github.com/xuri/excelize", "External"))
 	assert.NoError(t, f.SetCellHyperLink(sheet1, "C5", "https://github.com", "External"))
 
 	assert.NoError(t, f.MergeCell(sheet1, "A1", "B1"))

@@ -46,7 +46,7 @@ func TestConcurrency(t *testing.T) {
 				&GraphicOptions{
 					OffsetX:       10,
 					OffsetY:       10,
-					Hyperlink:     "https://github.com/Aymeric-Henry/excelize",
+					Hyperlink:     "https://github.com/xuri/excelize",
 					HyperlinkType: "External",
 					Positioning:   "oneCell",
 				},
@@ -65,7 +65,7 @@ func TestConcurrency(t *testing.T) {
 			// Concurrency iterate columns
 			cols, err := f.Cols("Sheet1")
 			assert.NoError(t, err)
-			for rows.Next() {
+			for cols.Next() {
 				_, err := cols.Rows()
 				assert.NoError(t, err)
 			}
@@ -174,6 +174,39 @@ func TestSetCellFloat(t *testing.T) {
 	assert.EqualError(t, f.SetCellFloat(sheet, "A", 123.42, -1, 64), newCellNameToCoordinatesError("A", newInvalidCellNameError("A")).Error())
 	// Test set cell float data type value with invalid sheet name
 	assert.EqualError(t, f.SetCellFloat("Sheet:1", "A1", 123.42, -1, 64), ErrSheetNameInvalid.Error())
+}
+
+func TestSetCellValuesMultiByte(t *testing.T) {
+	f := NewFile()
+	row := []interface{}{
+		// Test set cell value with multi byte characters value
+		strings.Repeat("\u4E00", TotalCellChars+1),
+		// Test set cell value with XML escape characters
+		strings.Repeat("<>", TotalCellChars/2),
+		strings.Repeat(">", TotalCellChars-1),
+		strings.Repeat(">", TotalCellChars+1),
+	}
+	assert.NoError(t, f.SetSheetRow("Sheet1", "A1", &row))
+	// Test set cell value with XML escape characters in stream writer
+	_, err := f.NewSheet("Sheet2")
+	assert.NoError(t, err)
+	streamWriter, err := f.NewStreamWriter("Sheet2")
+	assert.NoError(t, err)
+	assert.NoError(t, streamWriter.SetRow("A1", row))
+	assert.NoError(t, streamWriter.Flush())
+	for _, sheetName := range []string{"Sheet1", "Sheet2"} {
+		for cell, expected := range map[string]int{
+			"A1": TotalCellChars,
+			"B1": TotalCellChars - 1,
+			"C1": TotalCellChars - 1,
+			"D1": TotalCellChars,
+		} {
+			result, err := f.GetCellValue(sheetName, cell)
+			assert.NoError(t, err)
+			assert.Len(t, []rune(result), expected)
+		}
+	}
+	assert.NoError(t, f.SaveAs(filepath.Join("test", "TestSetCellValuesMultiByte.xlsx")))
 }
 
 func TestSetCellValue(t *testing.T) {
@@ -432,6 +465,11 @@ func TestGetValueFrom(t *testing.T) {
 	value, err := c.getValueFrom(f, sst, false)
 	assert.NoError(t, err)
 	assert.Equal(t, "", value)
+
+	c = xlsxC{T: "s", V: " 1 "}
+	value, err = c.getValueFrom(f, &xlsxSST{Count: 1, SI: []xlsxSI{{}, {T: &xlsxT{Val: "s"}}}}, false)
+	assert.NoError(t, err)
+	assert.Equal(t, "s", value)
 }
 
 func TestGetCellFormula(t *testing.T) {
@@ -571,7 +609,7 @@ func TestSetCellFormula(t *testing.T) {
 	for idx, row := range [][]interface{}{{"A", "B", "C"}, {1, 2}} {
 		assert.NoError(t, f.SetSheetRow("Sheet1", fmt.Sprintf("A%d", idx+1), &row))
 	}
-	assert.NoError(t, f.AddTable("Sheet1", "A1:C2", &TableOptions{Name: "Table1", StyleName: "TableStyleMedium2"}))
+	assert.NoError(t, f.AddTable("Sheet1", &Table{Range: "A1:C2", Name: "Table1", StyleName: "TableStyleMedium2"}))
 	formulaType = STCellFormulaTypeDataTable
 	assert.NoError(t, f.SetCellFormula("Sheet1", "C2", "=SUM(Table1[[A]:[B]])", FormulaOpts{Type: &formulaType}))
 	assert.NoError(t, f.SaveAs(filepath.Join("test", "TestSetCellFormula6.xlsx")))
@@ -765,21 +803,21 @@ func TestSetCellRichText(t *testing.T) {
 
 func TestFormattedValue(t *testing.T) {
 	f := NewFile()
-	result, err := f.formattedValue(0, "43528", false)
+	result, err := f.formattedValue(&xlsxC{S: 0, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 
 	// S is too large
-	result, err = f.formattedValue(15, "43528", false)
+	result, err = f.formattedValue(&xlsxC{S: 15, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 
 	// S is too small
-	result, err = f.formattedValue(-15, "43528", false)
+	result, err = f.formattedValue(&xlsxC{S: -15, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 
-	result, err = f.formattedValue(1, "43528", false)
+	result, err = f.formattedValue(&xlsxC{S: 1, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 	customNumFmt := "[$-409]MM/DD/YYYY"
@@ -787,7 +825,7 @@ func TestFormattedValue(t *testing.T) {
 		CustomNumFmt: &customNumFmt,
 	})
 	assert.NoError(t, err)
-	result, err = f.formattedValue(1, "43528", false)
+	result, err = f.formattedValue(&xlsxC{S: 1, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "03/04/2019", result)
 
@@ -796,7 +834,7 @@ func TestFormattedValue(t *testing.T) {
 	f.Styles.CellXfs.Xf = append(f.Styles.CellXfs.Xf, xlsxXf{
 		NumFmtID: &numFmtID,
 	})
-	result, err = f.formattedValue(2, "43528", false)
+	result, err = f.formattedValue(&xlsxC{S: 2, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 
@@ -804,7 +842,7 @@ func TestFormattedValue(t *testing.T) {
 	f.Styles.CellXfs.Xf = append(f.Styles.CellXfs.Xf, xlsxXf{
 		NumFmtID: nil,
 	})
-	result, err = f.formattedValue(3, "43528", false)
+	result, err = f.formattedValue(&xlsxC{S: 3, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 
@@ -813,7 +851,16 @@ func TestFormattedValue(t *testing.T) {
 	f.Styles.CellXfs.Xf = append(f.Styles.CellXfs.Xf, xlsxXf{
 		NumFmtID: &numFmtID,
 	})
-	result, err = f.formattedValue(1, "43528", false)
+	result, err = f.formattedValue(&xlsxC{S: 1, V: "43528"}, false, CellTypeNumber)
+	assert.NoError(t, err)
+	assert.Equal(t, "43528", result)
+
+	// Test format numeric value with shared string data type
+	f.Styles.NumFmts, numFmtID = nil, 11
+	f.Styles.CellXfs.Xf = append(f.Styles.CellXfs.Xf, xlsxXf{
+		NumFmtID: &numFmtID,
+	})
+	result, err = f.formattedValue(&xlsxC{S: 5, V: "43528"}, false, CellTypeSharedString)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 
@@ -822,32 +869,32 @@ func TestFormattedValue(t *testing.T) {
 		NumFmt: 1,
 	})
 	assert.NoError(t, err)
-	result, err = f.formattedValue(styleID, "310.56", false)
+	result, err = f.formattedValue(&xlsxC{S: styleID, V: "310.56"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "311", result)
 
-	for _, fn := range builtInNumFmtFunc {
-		assert.Equal(t, "0_0", fn("0_0", "", false))
-	}
+	assert.Equal(t, "0_0", format("0_0", "", false, CellTypeNumber, nil))
 
 	// Test format value with unsupported charset workbook
 	f.WorkBook = nil
 	f.Pkg.Store(defaultXMLPathWorkbook, MacintoshCyrillicCharset)
-	_, err = f.formattedValue(1, "43528", false)
+	_, err = f.formattedValue(&xlsxC{S: 1, V: "43528"}, false, CellTypeNumber)
 	assert.EqualError(t, err, "XML syntax error on line 1: invalid UTF-8")
 
 	// Test format value with unsupported charset style sheet
 	f.Styles = nil
 	f.Pkg.Store(defaultXMLPathStyles, MacintoshCyrillicCharset)
-	_, err = f.formattedValue(1, "43528", false)
+	_, err = f.formattedValue(&xlsxC{S: 1, V: "43528"}, false, CellTypeNumber)
 	assert.EqualError(t, err, "XML syntax error on line 1: invalid UTF-8")
+
+	assert.Equal(t, "text", format("text", "0", false, CellTypeNumber, nil))
 }
 
 func TestFormattedValueNilXfs(t *testing.T) {
 	// Set the CellXfs to nil and verify that the formattedValue function does not crash
 	f := NewFile()
 	f.Styles.CellXfs = nil
-	result, err := f.formattedValue(3, "43528", false)
+	result, err := f.formattedValue(&xlsxC{S: 3, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 }
@@ -856,7 +903,7 @@ func TestFormattedValueNilNumFmts(t *testing.T) {
 	// Set the NumFmts value to nil and verify that the formattedValue function does not crash
 	f := NewFile()
 	f.Styles.NumFmts = nil
-	result, err := f.formattedValue(3, "43528", false)
+	result, err := f.formattedValue(&xlsxC{S: 3, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 }
@@ -865,7 +912,7 @@ func TestFormattedValueNilWorkbook(t *testing.T) {
 	// Set the Workbook value to nil and verify that the formattedValue function does not crash
 	f := NewFile()
 	f.WorkBook = nil
-	result, err := f.formattedValue(3, "43528", false)
+	result, err := f.formattedValue(&xlsxC{S: 3, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 }
@@ -875,7 +922,7 @@ func TestFormattedValueNilWorkbookPr(t *testing.T) {
 	// crash.
 	f := NewFile()
 	f.WorkBook.WorkbookPr = nil
-	result, err := f.formattedValue(3, "43528", false)
+	result, err := f.formattedValue(&xlsxC{S: 3, V: "43528"}, false, CellTypeNumber)
 	assert.NoError(t, err)
 	assert.Equal(t, "43528", result)
 }

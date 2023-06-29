@@ -56,7 +56,7 @@ func parseShapeOptions(opts *Shape) (*Shape, error) {
 //	    &excelize.Shape{
 //	        Type: "rect",
 //	        Line: excelize.ShapeLine{Color: "4286F4", Width: &lineWidth},
-//	        Fill: excelize.Fill{Color: []string{"8EB9FF"}},
+//	        Fill: excelize.Fill{Color: []string{"8EB9FF"}, Pattern: 1},
 //	        Paragraph: []excelize.RichTextRun{
 //	            {
 //	                Text: "Rectangle Shape",
@@ -326,13 +326,10 @@ func (f *File) addDrawingShape(sheet, drawingXML, cell string, opts *Shape) erro
 	if err != nil {
 		return err
 	}
-	colIdx := fromCol - 1
-	rowIdx := fromRow - 1
-
 	width := int(float64(opts.Width) * opts.Format.ScaleX)
 	height := int(float64(opts.Height) * opts.Format.ScaleY)
 
-	colStart, rowStart, colEnd, rowEnd, x2, y2 := f.positionObjectPixels(sheet, colIdx, rowIdx, opts.Format.OffsetX, opts.Format.OffsetY,
+	colStart, rowStart, colEnd, rowEnd, x2, y2 := f.positionObjectPixels(sheet, fromCol, fromRow, opts.Format.OffsetX, opts.Format.OffsetY,
 		width, height)
 	content, cNvPrID, err := f.drawingParser(drawingXML)
 	if err != nil {

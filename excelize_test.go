@@ -396,9 +396,9 @@ func TestSetCellHyperLink(t *testing.T) {
 	f, err := OpenFile(filepath.Join("test", "Book1.xlsx"))
 	assert.NoError(t, err)
 	// Test set cell hyperlink in a work sheet already have hyperlinks
-	assert.NoError(t, f.SetCellHyperLink("Sheet1", "B19", "https://github.com/Aymeric-Henry/excelize", "External"))
+	assert.NoError(t, f.SetCellHyperLink("Sheet1", "B19", "https://github.com/xuri/excelize", "External"))
 	// Test add first hyperlink in a work sheet
-	assert.NoError(t, f.SetCellHyperLink("Sheet2", "C1", "https://github.com/Aymeric-Henry/excelize", "External"))
+	assert.NoError(t, f.SetCellHyperLink("Sheet2", "C1", "https://github.com/xuri/excelize", "External"))
 	// Test add Location hyperlink in a work sheet
 	assert.NoError(t, f.SetCellHyperLink("Sheet2", "D6", "Sheet1!D8", "Location"))
 	// Test add Location hyperlink with display & tooltip in a work sheet
@@ -420,7 +420,7 @@ func TestSetCellHyperLink(t *testing.T) {
 	ws, ok := f.Sheet.Load("xl/worksheets/sheet1.xml")
 	assert.True(t, ok)
 	ws.(*xlsxWorksheet).Hyperlinks = &xlsxHyperlinks{Hyperlink: make([]xlsxHyperlink, 65530)}
-	assert.EqualError(t, f.SetCellHyperLink("Sheet1", "A65531", "https://github.com/Aymeric-Henry/excelize", "External"), ErrTotalSheetHyperlinks.Error())
+	assert.EqualError(t, f.SetCellHyperLink("Sheet1", "A65531", "https://github.com/xuri/excelize", "External"), ErrTotalSheetHyperlinks.Error())
 
 	f = NewFile()
 	_, err = f.workSheetReader("Sheet1")
@@ -428,16 +428,16 @@ func TestSetCellHyperLink(t *testing.T) {
 	ws, ok = f.Sheet.Load("xl/worksheets/sheet1.xml")
 	assert.True(t, ok)
 	ws.(*xlsxWorksheet).MergeCells = &xlsxMergeCells{Cells: []*xlsxMergeCell{{Ref: "A:A"}}}
-	err = f.SetCellHyperLink("Sheet1", "A1", "https://github.com/Aymeric-Henry/excelize", "External")
+	err = f.SetCellHyperLink("Sheet1", "A1", "https://github.com/xuri/excelize", "External")
 	assert.EqualError(t, err, newCellNameToCoordinatesError("A", newInvalidCellNameError("A")).Error())
 
 	// Test update cell hyperlink
 	f = NewFile()
 	assert.NoError(t, f.SetCellHyperLink("Sheet1", "A1", "https://github.com", "External"))
-	assert.NoError(t, f.SetCellHyperLink("Sheet1", "A1", "https://github.com/Aymeric-Henry/excelize", "External"))
+	assert.NoError(t, f.SetCellHyperLink("Sheet1", "A1", "https://github.com/xuri/excelize", "External"))
 	link, target, err := f.GetCellHyperLink("Sheet1", "A1")
 	assert.Equal(t, link, true)
-	assert.Equal(t, "https://github.com/Aymeric-Henry/excelize", target)
+	assert.Equal(t, "https://github.com/xuri/excelize", target)
 	assert.NoError(t, err)
 }
 
@@ -480,7 +480,7 @@ func TestGetCellHyperLink(t *testing.T) {
 
 	ws, ok = f.Sheet.Load("xl/worksheets/sheet1.xml")
 	assert.True(t, ok)
-	ws.(*xlsxWorksheet).MergeCells = &xlsxMergeCells{Cells: []*xlsxMergeCell{{Ref: "A:A"}}}
+	ws.(*xlsxWorksheet).Hyperlinks = &xlsxHyperlinks{Hyperlink: []xlsxHyperlink{{Ref: "A:A"}}}
 	link, target, err = f.GetCellHyperLink("Sheet1", "A1")
 	assert.EqualError(t, err, newCellNameToCoordinatesError("A", newInvalidCellNameError("A")).Error())
 	assert.Equal(t, link, false)
@@ -747,33 +747,33 @@ func TestSetCellStyleNumberFormat(t *testing.T) {
 
 	// Test only set fill and number format for a cell
 	col := []string{"L", "M", "N", "O", "P"}
-	data := []int{0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49}
+	idxTbl := []int{0, 1, 2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49}
 	value := []string{"37947.7500001", "-37947.7500001", "0.007", "2.1", "String"}
 	expected := [][]string{
-		{"37947.7500001", "37948", "37947.75", "37,948", "37947.75", "3794775%", "3794775.00%", "3.79E+04", "37947.7500001", "37947.7500001", "11-22-03", "22-Nov-03", "22-Nov", "Nov-03", "6:00 pm", "6:00:00 pm", "18:00", "18:00:00", "11/22/03 18:00", "37,948 ", "37,948 ", "37,947.75 ", "37,947.75 ", "37947.7500001", "37947.7500001", "37947.7500001", "37947.7500001", "00:00", "910746:00:00", "37947.7500001", "3.79E+04", "37947.7500001"},
-		{"-37947.7500001", "-37948", "-37947.75", "-37,948", "-37947.75", "-3794775%", "-3794775.00%", "-3.79E+04", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "(37,948)", "(37,948)", "(37,947.75)", "(37,947.75)", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-3.79E+04", "-37947.7500001"},
-		{"0.007", "0", "0.01", "0", "0.01", "1%", "0.70%", "7.00E-03", "0.007", "0.007", "12-30-99", "30-Dec-99", "30-Dec", "Dec-99", "0:10 am", "0:10:04 am", "00:10", "00:10:04", "12/30/99 00:10", "0 ", "0 ", "0.01 ", "0.01 ", "0.007", "0.007", "0.007", "0.007", "10:04", "0:10:04", "0.007", "7.00E-03", "0.007"},
-		{"2.1", "2", "2.10", "2", "2.10", "210%", "210.00%", "2.10E+00", "2.1", "2.1", "01-01-00", "1-Jan-00", "1-Jan", "Jan-00", "2:24 am", "2:24:00 am", "02:24", "02:24:00", "1/1/00 02:24", "2 ", "2 ", "2.10 ", "2.10 ", "2.1", "2.1", "2.1", "2.1", "24:00", "50:24:00", "2.1", "2.10E+00", "2.1"},
+		{"37947.7500001", "37948", "37947.75", "37,948", "37,947.75", "3794775%", "3794775.00%", "3.79E+04", "37947.7500001", "37947.7500001", "11-22-03", "22-Nov-03", "22-Nov", "Nov-03", "6:00 PM", "6:00:00 PM", "18:00", "18:00:00", "11/22/03 18:00", "37,948 ", "37,948 ", "37,947.75 ", "37,947.75 ", "37947.7500001", "37947.7500001", "37947.7500001", "37947.7500001", "00:00", "910746:00:00", "00:00.0", "37947.7500001", "37947.7500001"},
+		{"-37947.7500001", "-37948", "-37947.75", "-37,948", "-37,947.75", "-3794775%", "-3794775.00%", "-3.79E+04", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "(37,948)", "(37,948)", "(37,947.75)", "(37,947.75)", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001", "-37947.7500001"},
+		{"0.007", "0", "0.01", "0", "0.01", "1%", "0.70%", "7.00E-03", "0.007", "0.007", "12-30-99", "30-Dec-99", "30-Dec", "Dec-99", "12:10 AM", "12:10:05 AM", "00:10", "00:10:05", "12/30/99 00:10", "0 ", "0 ", "0.01 ", "0.01 ", "0.007", "0.007", "0.007", "0.007", "10:05", "0:10:05", "10:04.8", "0.007", "0.007"},
+		{"2.1", "2", "2.10", "2", "2.10", "210%", "210.00%", "2.10E+00", "2.1", "2.1", "01-01-00", "1-Jan-00", "1-Jan", "Jan-00", "2:24 AM", "2:24:00 AM", "02:24", "02:24:00", "1/1/00 02:24", "2 ", "2 ", "2.10 ", "2.10 ", "2.1", "2.1", "2.1", "2.1", "24:00", "50:24:00", "24:00.0", "2.1", "2.1"},
 		{"String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String", "String"},
 	}
 
-	for i, v := range value {
-		for k, d := range data {
-			c := col[i] + strconv.Itoa(k+1)
+	for c, v := range value {
+		for r, idx := range idxTbl {
+			cell := col[c] + strconv.Itoa(r+1)
 			var val float64
 			val, err = strconv.ParseFloat(v, 64)
 			if err != nil {
-				assert.NoError(t, f.SetCellValue("Sheet2", c, v))
+				assert.NoError(t, f.SetCellValue("Sheet2", cell, v))
 			} else {
-				assert.NoError(t, f.SetCellValue("Sheet2", c, val))
+				assert.NoError(t, f.SetCellValue("Sheet2", cell, val))
 			}
-			style, err := f.NewStyle(&Style{Fill: Fill{Type: "gradient", Color: []string{"FFFFFF", "E0EBF5"}, Shading: 5}, NumFmt: d})
+			style, err := f.NewStyle(&Style{Fill: Fill{Type: "gradient", Color: []string{"FFFFFF", "E0EBF5"}, Shading: 5}, NumFmt: idx})
 			if !assert.NoError(t, err) {
 				t.FailNow()
 			}
-			assert.NoError(t, f.SetCellStyle("Sheet2", c, c, style))
-			cellValue, err := f.GetCellValue("Sheet2", c)
-			assert.Equal(t, expected[i][k], cellValue, "Sheet2!"+c, i, k)
+			assert.NoError(t, f.SetCellStyle("Sheet2", cell, cell, style))
+			cellValue, err := f.GetCellValue("Sheet2", cell)
+			assert.Equal(t, expected[c][r], cellValue, fmt.Sprintf("Sheet2!%s value: %s, number format: %s c: %d r: %d", cell, value[c], builtInNumFmt[idx], c, r))
 			assert.NoError(t, err)
 		}
 	}
@@ -783,6 +783,16 @@ func TestSetCellStyleNumberFormat(t *testing.T) {
 	assert.NoError(t, f.SetCellStyle("Sheet2", "L33", "L33", style))
 
 	assert.NoError(t, f.SaveAs(filepath.Join("test", "TestSetCellStyleNumberFormat.xlsx")))
+
+	// Test get cell value with built-in number format code 22 with custom short date pattern
+	f = NewFile(Options{ShortDatePattern: "yyyy-m-dd"})
+	assert.NoError(t, f.SetCellValue("Sheet1", "A1", 45074.625694444447))
+	style, err = f.NewStyle(&Style{NumFmt: 22})
+	assert.NoError(t, err)
+	assert.NoError(t, f.SetCellStyle("Sheet1", "A1", "A1", style))
+	cellValue, err := f.GetCellValue("Sheet1", "A1")
+	assert.NoError(t, err)
+	assert.Equal(t, "2023-5-28 15:01", cellValue)
 }
 
 func TestSetCellStyleCurrencyNumberFormat(t *testing.T) {
@@ -811,24 +821,59 @@ func TestSetCellStyleCurrencyNumberFormat(t *testing.T) {
 		assert.NoError(t, f.SetCellValue("Sheet1", "A1", 42920.5))
 		assert.NoError(t, f.SetCellValue("Sheet1", "A2", 42920.5))
 
-		_, err = f.NewStyle(&Style{NumFmt: 26, Lang: "zh-tw"})
+		_, err = f.NewStyle(&Style{NumFmt: 26})
 		assert.NoError(t, err)
 
 		style, err := f.NewStyle(&Style{NumFmt: 27})
 		assert.NoError(t, err)
 
 		assert.NoError(t, f.SetCellStyle("Sheet1", "A1", "A1", style))
-		style, err = f.NewStyle(&Style{NumFmt: 31, Lang: "ko-kr"})
+		style, err = f.NewStyle(&Style{NumFmt: 31})
 		assert.NoError(t, err)
 
 		assert.NoError(t, f.SetCellStyle("Sheet1", "A2", "A2", style))
 
-		style, err = f.NewStyle(&Style{NumFmt: 71, Lang: "th-th"})
+		style, err = f.NewStyle(&Style{NumFmt: 71})
 		assert.NoError(t, err)
 		assert.NoError(t, f.SetCellStyle("Sheet1", "A2", "A2", style))
 
 		assert.NoError(t, f.SaveAs(filepath.Join("test", "TestSetCellStyleCurrencyNumberFormat.TestBook4.xlsx")))
 	})
+}
+
+func TestSetCellStyleLangNumberFormat(t *testing.T) {
+	rawCellValues := [][]string{{"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}}
+	for lang, expected := range map[CultureName][][]string{
+		CultureNameUnknown: rawCellValues,
+		CultureNameEnUS:    {{"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"0:00:00"}, {"0:00:00"}, {"0:00:00"}, {"0:00:00"}, {"45162"}, {"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"8/24/23"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}},
+		CultureNameZhCN:    {{"2023年8月"}, {"8月24日"}, {"8月24日"}, {"8/24/23"}, {"2023年8月24日"}, {"0时00分"}, {"0时00分00秒"}, {"上午12时00分"}, {"上午12时00分00秒"}, {"2023年8月"}, {"2023年8月"}, {"8月24日"}, {"2023年8月"}, {"8月24日"}, {"8月24日"}, {"上午12时00分"}, {"上午12时00分00秒"}, {"2023年8月"}, {"8月24日"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}},
+	} {
+		f, err := prepareTestBook5(Options{CultureInfo: lang})
+		assert.NoError(t, err)
+		rows, err := f.GetRows("Sheet1")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, rows)
+		assert.NoError(t, f.Close())
+	}
+	// Test apply language number format code with date and time pattern
+	for lang, expected := range map[CultureName][][]string{
+		CultureNameEnUS: {{"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"00:00:00"}, {"00:00:00"}, {"00:00:00"}, {"00:00:00"}, {"45162"}, {"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"2023-8-24"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}},
+		CultureNameZhCN: {{"2023年8月"}, {"8月24日"}, {"8月24日"}, {"2023-8-24"}, {"2023年8月24日"}, {"00:00:00"}, {"00:00:00"}, {"上午12时00分"}, {"上午12时00分00秒"}, {"2023年8月"}, {"2023年8月"}, {"8月24日"}, {"2023年8月"}, {"8月24日"}, {"8月24日"}, {"上午12时00分"}, {"上午12时00分00秒"}, {"2023年8月"}, {"8月24日"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}, {"45162"}},
+	} {
+		f, err := prepareTestBook5(Options{CultureInfo: lang, ShortDatePattern: "yyyy-M-d", LongTimePattern: "hh:mm:ss"})
+		assert.NoError(t, err)
+		rows, err := f.GetRows("Sheet1")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, rows)
+		assert.NoError(t, f.Close())
+	}
+	// Test open workbook with invalid date and time pattern options
+	_, err := OpenFile(filepath.Join("test", "Book1.xlsx"), Options{LongDatePattern: "0.00"})
+	assert.Equal(t, ErrUnsupportedNumberFormat, err)
+	_, err = OpenFile(filepath.Join("test", "Book1.xlsx"), Options{LongTimePattern: "0.00"})
+	assert.Equal(t, ErrUnsupportedNumberFormat, err)
+	_, err = OpenFile(filepath.Join("test", "Book1.xlsx"), Options{ShortDatePattern: "0.00"})
+	assert.Equal(t, ErrUnsupportedNumberFormat, err)
 }
 
 func TestSetCellStyleCustomNumberFormat(t *testing.T) {
@@ -997,7 +1042,7 @@ func TestConditionalFormat(t *testing.T) {
 	f := NewFile()
 	sheet1 := f.GetSheetName(0)
 
-	fillCells(f, sheet1, 10, 15)
+	assert.NoError(t, fillCells(f, sheet1, 10, 15))
 
 	var format1, format2, format3, format4 int
 	var err error
@@ -1319,8 +1364,8 @@ func TestProtectSheet(t *testing.T) {
 	}))
 	ws, err = f.workSheetReader(sheetName)
 	assert.NoError(t, err)
-	assert.Equal(t, 24, len(ws.SheetProtection.SaltValue))
-	assert.Equal(t, 88, len(ws.SheetProtection.HashValue))
+	assert.Len(t, ws.SheetProtection.SaltValue, 24)
+	assert.Len(t, ws.SheetProtection.HashValue, 88)
 	assert.Equal(t, int(sheetProtectionSpinCount), ws.SheetProtection.SpinCount)
 	// Test remove sheet protection with an incorrect password
 	assert.EqualError(t, f.UnprotectSheet(sheetName, "wrongPassword"), ErrUnprotectSheetPassword.Error())
@@ -1387,8 +1432,8 @@ func TestProtectWorkbook(t *testing.T) {
 	wb, err := f.workbookReader()
 	assert.NoError(t, err)
 	assert.Equal(t, "SHA-512", wb.WorkbookProtection.WorkbookAlgorithmName)
-	assert.Equal(t, 24, len(wb.WorkbookProtection.WorkbookSaltValue))
-	assert.Equal(t, 88, len(wb.WorkbookProtection.WorkbookHashValue))
+	assert.Len(t, wb.WorkbookProtection.WorkbookSaltValue, 24)
+	assert.Len(t, wb.WorkbookProtection.WorkbookHashValue, 88)
 	assert.Equal(t, int(workbookProtectionSpinCount), wb.WorkbookProtection.WorkbookSpinCount)
 
 	// Test protect workbook with password exceeds the limit length
@@ -1448,17 +1493,20 @@ func TestSetDefaultTimeStyle(t *testing.T) {
 
 func TestAddVBAProject(t *testing.T) {
 	f := NewFile()
+	file, err := os.ReadFile(filepath.Join("test", "Book1.xlsx"))
+	assert.NoError(t, err)
 	assert.NoError(t, f.SetSheetProps("Sheet1", &SheetPropsOptions{CodeName: stringPtr("Sheet1")}))
-	assert.EqualError(t, f.AddVBAProject("macros.bin"), "stat macros.bin: no such file or directory")
-	assert.EqualError(t, f.AddVBAProject(filepath.Join("test", "Book1.xlsx")), ErrAddVBAProject.Error())
-	assert.NoError(t, f.AddVBAProject(filepath.Join("test", "vbaProject.bin")))
+	assert.EqualError(t, f.AddVBAProject(file), ErrAddVBAProject.Error())
+	file, err = os.ReadFile(filepath.Join("test", "vbaProject.bin"))
+	assert.NoError(t, err)
+	assert.NoError(t, f.AddVBAProject(file))
 	// Test add VBA project twice
-	assert.NoError(t, f.AddVBAProject(filepath.Join("test", "vbaProject.bin")))
+	assert.NoError(t, f.AddVBAProject(file))
 	assert.NoError(t, f.SaveAs(filepath.Join("test", "TestAddVBAProject.xlsm")))
 	// Test add VBA with unsupported charset workbook relationships
 	f.Relationships.Delete(defaultXMLPathWorkbookRels)
 	f.Pkg.Store(defaultXMLPathWorkbookRels, MacintoshCyrillicCharset)
-	assert.EqualError(t, f.AddVBAProject(filepath.Join("test", "vbaProject.bin")), "XML syntax error on line 1: invalid UTF-8")
+	assert.EqualError(t, f.AddVBAProject(file), "XML syntax error on line 1: invalid UTF-8")
 }
 
 func TestContentTypesReader(t *testing.T) {
@@ -1545,7 +1593,7 @@ func prepareTestBook1() (*File, error) {
 		&GraphicOptions{
 			OffsetX:       10,
 			OffsetY:       10,
-			Hyperlink:     "https://github.com/Aymeric-Henry/excelize",
+			Hyperlink:     "https://github.com/xuri/excelize",
 			HyperlinkType: "External",
 			Positioning:   "oneCell",
 		},
@@ -1609,15 +1657,41 @@ func prepareTestBook4() (*File, error) {
 	return f, nil
 }
 
-func fillCells(f *File, sheet string, colCount, rowCount int) {
+func prepareTestBook5(opts Options) (*File, error) {
+	f := NewFile(opts)
+	var rowNum int
+	for _, idxRange := range [][]int{{27, 36}, {50, 81}} {
+		for numFmtIdx := idxRange[0]; numFmtIdx <= idxRange[1]; numFmtIdx++ {
+			rowNum++
+			styleID, err := f.NewStyle(&Style{NumFmt: numFmtIdx})
+			if err != nil {
+				return f, err
+			}
+			cell, err := CoordinatesToCellName(1, rowNum)
+			if err != nil {
+				return f, err
+			}
+			if err := f.SetCellValue("Sheet1", cell, 45162); err != nil {
+				return f, err
+			}
+			if err := f.SetCellStyle("Sheet1", cell, cell, styleID); err != nil {
+				return f, err
+			}
+		}
+	}
+	return f, nil
+}
+
+func fillCells(f *File, sheet string, colCount, rowCount int) error {
 	for col := 1; col <= colCount; col++ {
 		for row := 1; row <= rowCount; row++ {
 			cell, _ := CoordinatesToCellName(col, row)
 			if err := f.SetCellStr(sheet, cell, cell); err != nil {
-				fmt.Println(err)
+				return err
 			}
 		}
 	}
+	return nil
 }
 
 func BenchmarkOpenFile(b *testing.B) {

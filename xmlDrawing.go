@@ -144,7 +144,7 @@ const (
 	pivotTableVersion           = 3
 	defaultPictureScale         = 1.0
 	defaultChartDimensionWidth  = 480
-	defaultChartDimensionHeight = 290
+	defaultChartDimensionHeight = 260
 	defaultChartLegendPosition  = "bottom"
 	defaultChartShowBlanksAs    = "gap"
 	defaultShapeSize            = 160
@@ -440,7 +440,7 @@ type xlsxPoint2D struct {
 // xlsxWsDr directly maps the root element for a part of this content type shall
 // wsDr.
 type xlsxWsDr struct {
-	sync.Mutex
+	mu               sync.Mutex
 	XMLName          xml.Name                `xml:"xdr:wsDr"`
 	A                string                  `xml:"xmlns:a,attr,omitempty"`
 	Xdr              string                  `xml:"xmlns:xdr,attr,omitempty"`

@@ -40,16 +40,16 @@ func newInvalidExcelDateError(dateValue float64) error {
 	return fmt.Errorf("invalid date value %f, negative values are not supported", dateValue)
 }
 
-// newInvalidTableNameError defined the error message on receiving the invalid
-// table name.
-func newInvalidTableNameError(name string) error {
-	return fmt.Errorf("invalid table name %q", name)
+// newInvalidNameError defined the error message on receiving the invalid
+// defined name or table name.
+func newInvalidNameError(name string) error {
+	return fmt.Errorf("invalid name %q, the name should be starts with a letter or underscore, can not include a space or character, and can not conflict with an existing name in the workbook", name)
 }
 
 // newUnsupportedChartType defined the error message on receiving the chart
 // type are unsupported.
-func newUnsupportedChartType(chartType string) error {
-	return fmt.Errorf("unsupported chart type %s", chartType)
+func newUnsupportedChartType(chartType ChartType) error {
+	return fmt.Errorf("unsupported chart type %d", chartType)
 }
 
 // newUnzipSizeLimitError defined the error message on unzip size exceeds the
@@ -100,6 +100,12 @@ func newViewIdxError(viewIndex int) error {
 	return fmt.Errorf("view index %d out of range", viewIndex)
 }
 
+// newUnknownFilterTokenError defined the error message on receiving a unknown
+// filter operator token.
+func newUnknownFilterTokenError(token string) error {
+	return fmt.Errorf("unknown operator: %s", token)
+}
+
 var (
 	// ErrStreamSetColWidth defined the error message on set column width in
 	// stream writing mode.
@@ -129,7 +135,7 @@ var (
 	ErrInvalidFormula = errors.New("formula not valid")
 	// ErrAddVBAProject defined the error message on add the VBA project in
 	// the workbook.
-	ErrAddVBAProject = errors.New("unsupported VBA project extension")
+	ErrAddVBAProject = errors.New("unsupported VBA project")
 	// ErrMaxRows defined the error message on receive a row number exceeds maximum limit.
 	ErrMaxRows = errors.New("row number exceeds maximum limit")
 	// ErrMaxRowHeight defined the error message on receive an invalid row
@@ -143,7 +149,7 @@ var (
 	ErrWorkbookFileFormat = errors.New("unsupported workbook file format")
 	// ErrMaxFilePathLength defined the error message on receive the file path
 	// length overflow.
-	ErrMaxFilePathLength = errors.New("file path length exceeds maximum limit")
+	ErrMaxFilePathLength = fmt.Errorf("file path length exceeds maximum limit %d characters", MaxFilePathLength)
 	// ErrUnknownEncryptMechanism defined the error message on unsupported
 	// encryption mechanism.
 	ErrUnknownEncryptMechanism = errors.New("unknown encryption mechanism")
@@ -236,9 +242,11 @@ var (
 	// ErrSheetNameLength defined the error message on receiving the sheet
 	// name length exceeds the limit.
 	ErrSheetNameLength = fmt.Errorf("the sheet name length exceeds the %d characters limit", MaxSheetNameLength)
-	// ErrTableNameLength defined the error message on receiving the table name
-	// length exceeds the limit.
-	ErrTableNameLength = fmt.Errorf("the table name length exceeds the %d characters limit", MaxFieldLength)
+	// ErrNameLength defined the error message on receiving the defined name or
+	// table name length exceeds the limit.
+	ErrNameLength = fmt.Errorf("the name length exceeds the %d characters limit", MaxFieldLength)
+	// ErrExistsTableName defined the error message on given table already exists.
+	ErrExistsTableName = errors.New("the same name table already exists")
 	// ErrCellStyles defined the error message on cell styles exceeds the limit.
 	ErrCellStyles = fmt.Errorf("the cell styles exceeds the %d limit", MaxCellStyles)
 	// ErrUnprotectWorkbook defined the error message on workbook has set no

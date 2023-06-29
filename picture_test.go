@@ -41,7 +41,7 @@ func TestAddPicture(t *testing.T) {
 		&GraphicOptions{OffsetX: 140, OffsetY: 120, Hyperlink: "#Sheet2!D8", HyperlinkType: "Location"}))
 	// Test add picture to worksheet with offset, external hyperlink and positioning
 	assert.NoError(t, f.AddPicture("Sheet1", "F21", filepath.Join("test", "images", "excel.jpg"),
-		&GraphicOptions{OffsetX: 10, OffsetY: 10, Hyperlink: "https://github.com/Aymeric-Henry/excelize", HyperlinkType: "External", Positioning: "oneCell"}))
+		&GraphicOptions{OffsetX: 10, OffsetY: 10, Hyperlink: "https://github.com/xuri/excelize", HyperlinkType: "External", Positioning: "oneCell"}))
 
 	file, err := os.ReadFile(filepath.Join("test", "images", "excel.png"))
 	assert.NoError(t, err)
@@ -62,10 +62,9 @@ func TestAddPicture(t *testing.T) {
 	// Test add picture to worksheet from bytes with illegal cell reference
 	assert.EqualError(t, f.AddPictureFromBytes("Sheet1", "A", &Picture{Extension: ".png", File: file, Format: &GraphicOptions{AltText: "Excel Logo"}}), newCellNameToCoordinatesError("A", newInvalidCellNameError("A")).Error())
 
-	assert.NoError(t, f.AddPicture("Sheet1", "Q8", filepath.Join("test", "images", "excel.gif"), nil))
-	assert.NoError(t, f.AddPicture("Sheet1", "Q15", filepath.Join("test", "images", "excel.jpg"), nil))
-	assert.NoError(t, f.AddPicture("Sheet1", "Q22", filepath.Join("test", "images", "excel.tif"), nil))
-	assert.NoError(t, f.AddPicture("Sheet1", "Q28", filepath.Join("test", "images", "excel.bmp"), nil))
+	for cell, ext := range map[string]string{"Q8": "gif", "Q15": "jpg", "Q22": "tif", "Q28": "bmp"} {
+		assert.NoError(t, f.AddPicture("Sheet1", cell, filepath.Join("test", "images", fmt.Sprintf("excel.%s", ext)), nil))
+	}
 
 	// Test write file to given path
 	assert.NoError(t, f.SaveAs(filepath.Join("test", "TestAddPicture1.xlsx")))
@@ -99,16 +98,11 @@ func TestAddPictureErrors(t *testing.T) {
 	// Test add picture with custom image decoder and encoder
 	decode := func(r io.Reader) (image.Image, error) { return nil, nil }
 	decodeConfig := func(r io.Reader) (image.Config, error) { return image.Config{Height: 100, Width: 90}, nil }
-	image.RegisterFormat("emf", "", decode, decodeConfig)
-	image.RegisterFormat("wmf", "", decode, decodeConfig)
-	image.RegisterFormat("emz", "", decode, decodeConfig)
-	image.RegisterFormat("wmz", "", decode, decodeConfig)
-	image.RegisterFormat("svg", "", decode, decodeConfig)
-	assert.NoError(t, f.AddPicture("Sheet1", "Q1", filepath.Join("test", "images", "excel.emf"), nil))
-	assert.NoError(t, f.AddPicture("Sheet1", "Q7", filepath.Join("test", "images", "excel.wmf"), nil))
-	assert.NoError(t, f.AddPicture("Sheet1", "Q13", filepath.Join("test", "images", "excel.emz"), nil))
-	assert.NoError(t, f.AddPicture("Sheet1", "Q19", filepath.Join("test", "images", "excel.wmz"), nil))
-	assert.NoError(t, f.AddPicture("Sheet1", "Q25", "excelize.svg", &GraphicOptions{ScaleX: 2.1}))
+	for cell, ext := range map[string]string{"Q1": "emf", "Q7": "wmf", "Q13": "emz", "Q19": "wmz"} {
+		image.RegisterFormat(ext, "", decode, decodeConfig)
+		assert.NoError(t, f.AddPicture("Sheet1", cell, filepath.Join("test", "images", fmt.Sprintf("excel.%s", ext)), nil))
+	}
+	assert.NoError(t, f.AddPicture("Sheet1", "Q25", "excelize.svg", &GraphicOptions{ScaleX: 2.8}))
 	assert.NoError(t, f.SaveAs(filepath.Join("test", "TestAddPicture2.xlsx")))
 	assert.NoError(t, f.Close())
 }
